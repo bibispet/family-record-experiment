@@ -1,0 +1,1998 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "4be4fbd5-fce8-4d95-800b-55e44d7ee498",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "audit_events": {
+      "name": "audit_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dedupe_key": {
+          "name": "dedupe_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "audit_events_dedupe_key_uq": {
+          "name": "audit_events_dedupe_key_uq",
+          "columns": [
+            "dedupe_key"
+          ],
+          "isUnique": true
+        },
+        "audit_events_resource_time_idx": {
+          "name": "audit_events_resource_time_idx",
+          "columns": [
+            "resource_type",
+            "resource_id",
+            "occurred_at"
+          ],
+          "isUnique": false
+        },
+        "audit_events_space_time_idx": {
+          "name": "audit_events_space_time_idx",
+          "columns": [
+            "space_id",
+            "occurred_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "audit_events_space_id_family_spaces_id_fk": {
+          "name": "audit_events_space_id_family_spaces_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "family_spaces",
+          "columnsFrom": [
+            "space_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "audit_events_actor_user_id_users_id_fk": {
+          "name": "audit_events_actor_user_id_users_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "custodianships": {
+      "name": "custodianships",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "custodian_user_id": {
+          "name": "custodian_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "basis": {
+          "name": "basis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verification_status": {
+          "name": "verification_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ended_by_user_id": {
+          "name": "ended_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "custodianships_current_user_person_uq": {
+          "name": "custodianships_current_user_person_uq",
+          "columns": [
+            "person_id",
+            "custodian_user_id"
+          ],
+          "isUnique": true,
+          "where": "\"custodianships\".\"status\" in ('proposed', 'pending_verification', 'active', 'suspended', 'contested') and \"custodianships\".\"valid_until\" is null"
+        },
+        "custodianships_custodian_person_idx": {
+          "name": "custodianships_custodian_person_idx",
+          "columns": [
+            "custodian_user_id",
+            "person_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "custodianships_custodian_user_id_users_id_fk": {
+          "name": "custodianships_custodian_user_id_users_id_fk",
+          "tableFrom": "custodianships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "custodian_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "custodianships_created_by_user_id_users_id_fk": {
+          "name": "custodianships_created_by_user_id_users_id_fk",
+          "tableFrom": "custodianships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "custodianships_ended_by_user_id_users_id_fk": {
+          "name": "custodianships_ended_by_user_id_users_id_fk",
+          "tableFrom": "custodianships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "ended_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "custodianships_person_fk": {
+          "name": "custodianships_person_fk",
+          "tableFrom": "custodianships",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "custodianships_interval_ck": {
+          "name": "custodianships_interval_ck",
+          "value": "\"custodianships\".\"valid_until\" is null or (\"custodianships\".\"valid_from\" is not null and \"custodianships\".\"valid_until\" > \"custodianships\".\"valid_from\")"
+        },
+        "custodianships_active_dates_ck": {
+          "name": "custodianships_active_dates_ck",
+          "value": "\"custodianships\".\"status\" <> 'active' or \"custodianships\".\"valid_from\" is not null"
+        }
+      }
+    },
+    "family_spaces": {
+      "name": "family_spaces",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "family_spaces_created_by_user_id_users_id_fk": {
+          "name": "family_spaces_created_by_user_id_users_id_fk",
+          "tableFrom": "family_spaces",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "media_assets": {
+      "name": "media_assets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "story_id": {
+          "name": "story_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "r2_key": {
+          "name": "r2_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "canonical_mime": {
+          "name": "canonical_mime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ready_at": {
+          "name": "ready_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "media_assets_r2_key_uq": {
+          "name": "media_assets_r2_key_uq",
+          "columns": [
+            "r2_key"
+          ],
+          "isUnique": true
+        },
+        "media_assets_person_status_created_idx": {
+          "name": "media_assets_person_status_created_idx",
+          "columns": [
+            "person_id",
+            "status",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "media_assets_created_by_user_id_users_id_fk": {
+          "name": "media_assets_created_by_user_id_users_id_fk",
+          "tableFrom": "media_assets",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "media_assets_person_fk": {
+          "name": "media_assets_person_fk",
+          "tableFrom": "media_assets",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "media_assets_story_fk": {
+          "name": "media_assets_story_fk",
+          "tableFrom": "media_assets",
+          "tableTo": "stories",
+          "columnsFrom": [
+            "space_id",
+            "person_id",
+            "story_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "person_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "media_assets_byte_size_ck": {
+          "name": "media_assets_byte_size_ck",
+          "value": "\"media_assets\".\"byte_size\" > 0"
+        },
+        "media_assets_ready_at_ck": {
+          "name": "media_assets_ready_at_ck",
+          "value": "(\"media_assets\".\"status\" = 'ready' and \"media_assets\".\"ready_at\" is not null) or (\"media_assets\".\"status\" <> 'ready' and \"media_assets\".\"ready_at\" is null)"
+        }
+      }
+    },
+    "people": {
+      "name": "people",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "birth_date": {
+          "name": "birth_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "birth_date_accuracy": {
+          "name": "birth_date_accuracy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unknown'"
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "people_space_id_id_uq": {
+          "name": "people_space_id_id_uq",
+          "columns": [
+            "space_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "people_space_created_at_idx": {
+          "name": "people_space_created_at_idx",
+          "columns": [
+            "space_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "people_space_id_family_spaces_id_fk": {
+          "name": "people_space_id_family_spaces_id_fk",
+          "tableFrom": "people",
+          "tableTo": "family_spaces",
+          "columnsFrom": [
+            "space_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "people_created_by_user_id_users_id_fk": {
+          "name": "people_created_by_user_id_users_id_fk",
+          "tableFrom": "people",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "people_birth_date_shape_ck": {
+          "name": "people_birth_date_shape_ck",
+          "value": "\"people\".\"birth_date\" is null or length(\"people\".\"birth_date\") = 10"
+        },
+        "people_birth_date_accuracy_ck": {
+          "name": "people_birth_date_accuracy_ck",
+          "value": "(\"people\".\"birth_date\" is null and \"people\".\"birth_date_accuracy\" = 'unknown') or \"people\".\"birth_date\" is not null"
+        }
+      }
+    },
+    "person_account_links": {
+      "name": "person_account_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "claim_status": {
+          "name": "claim_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "verified_by_user_id": {
+          "name": "verified_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "person_account_links_current_person_uq": {
+          "name": "person_account_links_current_person_uq",
+          "columns": [
+            "person_id"
+          ],
+          "isUnique": true,
+          "where": "\"person_account_links\".\"claim_status\" = 'verified' and \"person_account_links\".\"valid_until\" is null"
+        },
+        "person_account_links_current_user_space_uq": {
+          "name": "person_account_links_current_user_space_uq",
+          "columns": [
+            "space_id",
+            "user_id"
+          ],
+          "isUnique": true,
+          "where": "\"person_account_links\".\"claim_status\" = 'verified' and \"person_account_links\".\"valid_until\" is null"
+        },
+        "person_account_links_user_status_idx": {
+          "name": "person_account_links_user_status_idx",
+          "columns": [
+            "user_id",
+            "claim_status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "person_account_links_user_id_users_id_fk": {
+          "name": "person_account_links_user_id_users_id_fk",
+          "tableFrom": "person_account_links",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "person_account_links_verified_by_user_id_users_id_fk": {
+          "name": "person_account_links_verified_by_user_id_users_id_fk",
+          "tableFrom": "person_account_links",
+          "tableTo": "users",
+          "columnsFrom": [
+            "verified_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "person_account_links_person_fk": {
+          "name": "person_account_links_person_fk",
+          "tableFrom": "person_account_links",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "person_account_links_interval_ck": {
+          "name": "person_account_links_interval_ck",
+          "value": "\"person_account_links\".\"valid_until\" is null or (\"person_account_links\".\"valid_from\" is not null and \"person_account_links\".\"valid_until\" > \"person_account_links\".\"valid_from\")"
+        },
+        "person_account_links_verified_ck": {
+          "name": "person_account_links_verified_ck",
+          "value": "\"person_account_links\".\"claim_status\" <> 'verified' or (\"person_account_links\".\"verified_at\" is not null and \"person_account_links\".\"valid_from\" is not null)"
+        }
+      }
+    },
+    "person_authorities": {
+      "name": "person_authorities",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "granted_by_user_id": {
+          "name": "granted_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "person_authorities_active_user_role_uq": {
+          "name": "person_authorities_active_user_role_uq",
+          "columns": [
+            "person_id",
+            "user_id",
+            "role"
+          ],
+          "isUnique": true,
+          "where": "\"person_authorities\".\"ends_at\" is null"
+        },
+        "person_authorities_active_self_uq": {
+          "name": "person_authorities_active_self_uq",
+          "columns": [
+            "person_id"
+          ],
+          "isUnique": true,
+          "where": "\"person_authorities\".\"role\" = 'self' and \"person_authorities\".\"ends_at\" is null"
+        },
+        "person_authorities_user_person_idx": {
+          "name": "person_authorities_user_person_idx",
+          "columns": [
+            "user_id",
+            "person_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "person_authorities_user_id_users_id_fk": {
+          "name": "person_authorities_user_id_users_id_fk",
+          "tableFrom": "person_authorities",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "person_authorities_granted_by_user_id_users_id_fk": {
+          "name": "person_authorities_granted_by_user_id_users_id_fk",
+          "tableFrom": "person_authorities",
+          "tableTo": "users",
+          "columnsFrom": [
+            "granted_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "person_authorities_person_fk": {
+          "name": "person_authorities_person_fk",
+          "tableFrom": "person_authorities",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "person_authorities_interval_ck": {
+          "name": "person_authorities_interval_ck",
+          "value": "\"person_authorities\".\"ends_at\" is null or \"person_authorities\".\"ends_at\" > \"person_authorities\".\"starts_at\""
+        }
+      }
+    },
+    "relationships": {
+      "name": "relationships",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_person_id": {
+          "name": "source_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_person_id": {
+          "name": "target_person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relationship_type": {
+          "name": "relationship_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evidence_mode": {
+          "name": "evidence_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ended_by_user_id": {
+          "name": "ended_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "relationships_active_pair_type_uq": {
+          "name": "relationships_active_pair_type_uq",
+          "columns": [
+            "space_id",
+            "relationship_type",
+            "source_person_id",
+            "target_person_id"
+          ],
+          "isUnique": true,
+          "where": "\"relationships\".\"ended_at\" is null"
+        },
+        "relationships_source_active_idx": {
+          "name": "relationships_source_active_idx",
+          "columns": [
+            "source_person_id",
+            "ended_at"
+          ],
+          "isUnique": false
+        },
+        "relationships_target_active_idx": {
+          "name": "relationships_target_active_idx",
+          "columns": [
+            "target_person_id",
+            "ended_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "relationships_created_by_user_id_users_id_fk": {
+          "name": "relationships_created_by_user_id_users_id_fk",
+          "tableFrom": "relationships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "relationships_ended_by_user_id_users_id_fk": {
+          "name": "relationships_ended_by_user_id_users_id_fk",
+          "tableFrom": "relationships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "ended_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "relationships_source_person_fk": {
+          "name": "relationships_source_person_fk",
+          "tableFrom": "relationships",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "source_person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "relationships_target_person_fk": {
+          "name": "relationships_target_person_fk",
+          "tableFrom": "relationships",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "target_person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "relationships_distinct_people_ck": {
+          "name": "relationships_distinct_people_ck",
+          "value": "\"relationships\".\"source_person_id\" <> \"relationships\".\"target_person_id\""
+        },
+        "relationships_ended_by_ck": {
+          "name": "relationships_ended_by_ck",
+          "value": "(\"relationships\".\"ended_at\" is null and \"relationships\".\"ended_by_user_id\" is null) or (\"relationships\".\"ended_at\" is not null and \"relationships\".\"ended_by_user_id\" is not null)"
+        }
+      }
+    },
+    "share_grants": {
+      "name": "share_grants",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "share_set_id": {
+          "name": "share_set_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grantee_user_id": {
+          "name": "grantee_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "permission": {
+          "name": "permission",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "granted_by_user_id": {
+          "name": "granted_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revoked_by_user_id": {
+          "name": "revoked_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "share_grants_active_grantee_uq": {
+          "name": "share_grants_active_grantee_uq",
+          "columns": [
+            "share_set_id",
+            "grantee_user_id"
+          ],
+          "isUnique": true,
+          "where": "\"share_grants\".\"revoked_at\" is null"
+        },
+        "share_grants_grantee_set_idx": {
+          "name": "share_grants_grantee_set_idx",
+          "columns": [
+            "grantee_user_id",
+            "share_set_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "share_grants_grantee_user_id_users_id_fk": {
+          "name": "share_grants_grantee_user_id_users_id_fk",
+          "tableFrom": "share_grants",
+          "tableTo": "users",
+          "columnsFrom": [
+            "grantee_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "share_grants_granted_by_user_id_users_id_fk": {
+          "name": "share_grants_granted_by_user_id_users_id_fk",
+          "tableFrom": "share_grants",
+          "tableTo": "users",
+          "columnsFrom": [
+            "granted_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "share_grants_revoked_by_user_id_users_id_fk": {
+          "name": "share_grants_revoked_by_user_id_users_id_fk",
+          "tableFrom": "share_grants",
+          "tableTo": "users",
+          "columnsFrom": [
+            "revoked_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "share_grants_set_fk": {
+          "name": "share_grants_set_fk",
+          "tableFrom": "share_grants",
+          "tableTo": "share_sets",
+          "columnsFrom": [
+            "space_id",
+            "share_set_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "share_grants_revocation_ck": {
+          "name": "share_grants_revocation_ck",
+          "value": "(\"share_grants\".\"revoked_at\" is null and \"share_grants\".\"revoked_by_user_id\" is null) or (\"share_grants\".\"revoked_at\" > \"share_grants\".\"created_at\" and \"share_grants\".\"revoked_by_user_id\" is not null)"
+        }
+      }
+    },
+    "share_set_people": {
+      "name": "share_set_people",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "share_set_id": {
+          "name": "share_set_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "added_by_user_id": {
+          "name": "added_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "added_at": {
+          "name": "added_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "removed_at": {
+          "name": "removed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "removed_by_user_id": {
+          "name": "removed_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "share_set_people_active_member_uq": {
+          "name": "share_set_people_active_member_uq",
+          "columns": [
+            "share_set_id",
+            "person_id"
+          ],
+          "isUnique": true,
+          "where": "\"share_set_people\".\"removed_at\" is null"
+        },
+        "share_set_people_person_set_idx": {
+          "name": "share_set_people_person_set_idx",
+          "columns": [
+            "person_id",
+            "share_set_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "share_set_people_added_by_user_id_users_id_fk": {
+          "name": "share_set_people_added_by_user_id_users_id_fk",
+          "tableFrom": "share_set_people",
+          "tableTo": "users",
+          "columnsFrom": [
+            "added_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "share_set_people_removed_by_user_id_users_id_fk": {
+          "name": "share_set_people_removed_by_user_id_users_id_fk",
+          "tableFrom": "share_set_people",
+          "tableTo": "users",
+          "columnsFrom": [
+            "removed_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "share_set_people_set_fk": {
+          "name": "share_set_people_set_fk",
+          "tableFrom": "share_set_people",
+          "tableTo": "share_sets",
+          "columnsFrom": [
+            "space_id",
+            "share_set_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "share_set_people_person_fk": {
+          "name": "share_set_people_person_fk",
+          "tableFrom": "share_set_people",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "share_set_people_removal_ck": {
+          "name": "share_set_people_removal_ck",
+          "value": "(\"share_set_people\".\"removed_at\" is null and \"share_set_people\".\"removed_by_user_id\" is null) or (\"share_set_people\".\"removed_at\" > \"share_set_people\".\"added_at\" and \"share_set_people\".\"removed_by_user_id\" is not null)"
+        }
+      }
+    },
+    "share_sets": {
+      "name": "share_sets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "share_sets_space_id_id_uq": {
+          "name": "share_sets_space_id_id_uq",
+          "columns": [
+            "space_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "share_sets_space_active_idx": {
+          "name": "share_sets_space_active_idx",
+          "columns": [
+            "space_id",
+            "revoked_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "share_sets_space_id_family_spaces_id_fk": {
+          "name": "share_sets_space_id_family_spaces_id_fk",
+          "tableFrom": "share_sets",
+          "tableTo": "family_spaces",
+          "columnsFrom": [
+            "space_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "share_sets_created_by_user_id_users_id_fk": {
+          "name": "share_sets_created_by_user_id_users_id_fk",
+          "tableFrom": "share_sets",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "space_memberships": {
+      "name": "space_memberships",
+      "columns": {
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "joined_at": {
+          "name": "joined_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "space_memberships_user_status_idx": {
+          "name": "space_memberships_user_status_idx",
+          "columns": [
+            "user_id",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "space_memberships_space_id_family_spaces_id_fk": {
+          "name": "space_memberships_space_id_family_spaces_id_fk",
+          "tableFrom": "space_memberships",
+          "tableTo": "family_spaces",
+          "columnsFrom": [
+            "space_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "space_memberships_user_id_users_id_fk": {
+          "name": "space_memberships_user_id_users_id_fk",
+          "tableFrom": "space_memberships",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "space_memberships_space_id_user_id_pk": {
+          "columns": [
+            "space_id",
+            "user_id"
+          ],
+          "name": "space_memberships_space_id_user_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "stories": {
+      "name": "stories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "stories_space_person_id_uq": {
+          "name": "stories_space_person_id_uq",
+          "columns": [
+            "space_id",
+            "person_id",
+            "id"
+          ],
+          "isUnique": true
+        },
+        "stories_person_created_at_idx": {
+          "name": "stories_person_created_at_idx",
+          "columns": [
+            "person_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "stories_created_by_user_id_users_id_fk": {
+          "name": "stories_created_by_user_id_users_id_fk",
+          "tableFrom": "stories",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "stories_person_fk": {
+          "name": "stories_person_fk",
+          "tableFrom": "stories",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "stories_body_length_ck": {
+          "name": "stories_body_length_ck",
+          "value": "length(trim(\"stories\".\"body\")) between 1 and 4000"
+        }
+      }
+    },
+    "transfer_cases": {
+      "name": "transfer_cases",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_user_id": {
+          "name": "target_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "eligibility_civil_date": {
+          "name": "eligibility_civil_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "eligibility_at": {
+          "name": "eligibility_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "eligibility_time_zone": {
+          "name": "eligibility_time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "policy_version": {
+          "name": "policy_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "no_account_policy": {
+          "name": "no_account_policy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "policy_blocked_reason": {
+          "name": "policy_blocked_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completion_audit_event_id": {
+          "name": "completion_audit_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "transfer_cases_completion_audit_event_id_unique": {
+          "name": "transfer_cases_completion_audit_event_id_unique",
+          "columns": [
+            "completion_audit_event_id"
+          ],
+          "isUnique": true
+        },
+        "transfer_cases_person_status_idx": {
+          "name": "transfer_cases_person_status_idx",
+          "columns": [
+            "person_id",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "transfer_cases_target_user_id_users_id_fk": {
+          "name": "transfer_cases_target_user_id_users_id_fk",
+          "tableFrom": "transfer_cases",
+          "tableTo": "users",
+          "columnsFrom": [
+            "target_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfer_cases_created_by_user_id_users_id_fk": {
+          "name": "transfer_cases_created_by_user_id_users_id_fk",
+          "tableFrom": "transfer_cases",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfer_cases_completion_audit_event_id_audit_events_id_fk": {
+          "name": "transfer_cases_completion_audit_event_id_audit_events_id_fk",
+          "tableFrom": "transfer_cases",
+          "tableTo": "audit_events",
+          "columnsFrom": [
+            "completion_audit_event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfer_cases_person_fk": {
+          "name": "transfer_cases_person_fk",
+          "tableFrom": "transfer_cases",
+          "tableTo": "people",
+          "columnsFrom": [
+            "space_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "space_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "transfer_cases_completion_ck": {
+          "name": "transfer_cases_completion_ck",
+          "value": "(\"transfer_cases\".\"status\" = 'completed' and \"transfer_cases\".\"completed_at\" is not null and \"transfer_cases\".\"completion_audit_event_id\" is not null) or (\"transfer_cases\".\"status\" <> 'completed' and \"transfer_cases\".\"completed_at\" is null and \"transfer_cases\".\"completion_audit_event_id\" is null)"
+        },
+        "transfer_cases_policy_block_ck": {
+          "name": "transfer_cases_policy_block_ck",
+          "value": "\"transfer_cases\".\"status\" <> 'policy_blocked' or \"transfer_cases\".\"policy_blocked_reason\" is not null"
+        }
+      }
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "auth_subject": {
+          "name": "auth_subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email_display": {
+          "name": "email_display",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "users_auth_subject_uq": {
+          "name": "users_auth_subject_uq",
+          "columns": [
+            "auth_subject"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
