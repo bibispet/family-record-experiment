@@ -20,9 +20,13 @@ export default async function Home() {
           <span className="wordmark-mark" aria-hidden="true">F</span>
           <span>Family Record Experiment</span>
         </Link>
-        <a className="button button-secondary" href={recordPath}>
-          {viewer ? "Open family record" : "Sign in"}
-        </a>
+        {recordPath === null ? (
+          <span className="button button-secondary" aria-disabled="true">Sign-in not configured</span>
+        ) : (
+          <a className="button button-secondary" href={recordPath}>
+            {viewer ? "Open family record" : "Sign in"}
+          </a>
+        )}
       </nav>
 
       <section className="welcome-hero">
@@ -34,9 +38,13 @@ export default async function Home() {
             and the stories you do not want to lose.
           </p>
           <div className="welcome-actions">
-            <a className="button button-primary" href={recordPath}>
-              {viewer ? "Open your family record" : "Start your family record"}
-            </a>
+            {recordPath === null ? (
+              <span className="button button-primary" aria-disabled="true">Sign-in not configured</span>
+            ) : (
+              <a className="button button-primary" href={recordPath}>
+                {viewer ? "Open your family record" : "Start your family record"}
+              </a>
+            )}
             <span className="privacy-note">Private by default. No in-app analytics, feed, likes, or advertising.</span>
           </div>
         </div>

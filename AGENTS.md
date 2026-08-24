@@ -57,17 +57,26 @@ npm test           # build → unit → rendered-html (always run all three)
   `{ subjectId, email, displayName: string | null }` derived from
   `ApiActor` (what `getContext()` consumes), not from any vendor's headers.
   Two adapters implement it: `header` (reads `oai-authenticated-user-*`
-  injected by OpenAI Sites) and `local` (reads `x-local-*` headers, no
-  external dependency, no network calls). Legacy parsers remain in
-  `app/lib/api.ts` (`getApiActor`) and `app/chatgpt-auth.ts` for backwards
-  compat; new code uses `getViewer` / `getApiActorFromRequest` /
-  `getRscViewer` / `requireRscViewer`.
+  injected by OpenAI Sites) and `local` (reads `x-local-*` headers for
+  development only). Adapters are module-private — the only way to reach a
+  viewer is `getIdentityProvider()` / `getViewer` / `getApiActorFromRequest` /
+  `getRscViewer` / `requireRscViewer`. The old bypasses (`app/chatgpt-auth.ts`,
+  the raw `getApiActor` parser in `app/lib/api.ts`) have been deleted.
 - Selection via `IDENTITY_PROVIDER` (or `AUTH_PROVIDER`) env var:
   `header` / `oai` / `chatgpt` → header adapter, `local` / `dev` →
   local adapter, **default → `deny` (refuses to trust any inbound identity
   headers)**. Trusting `oai-*` from an untrusted proxy permits
-  impersonation; it is now explicit opt-in (`IDENTITY_PROVIDER=header`),
+  impersonation; it is explicit opt-in (`IDENTITY_PROVIDER=header`),
   not the default.
+- The local adapter is structurally confined to development: it refuses to
+  initialise (throws) unless `NODE_ENV` is `development` or `test` **and**
+  `FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1`, and re-checks on every resolution.
+  Unknown/absent `NODE_ENV` is treated as production. Never enable it where
+  visitors can set request headers.
+- Under `deny` there is no sign-in destination at all: `signInPath()`
+  returns null, API requests get 401, and `/family` fails closed instead of
+  redirecting. Vendor URLs (`/signin-with-chatgpt`) live in the header
+  adapter alone.
 - Multi-space requests target a space via the `x-family-space-id` header.
 - Opening `/family` while authenticated writes to D1 (auto-creates a personal
   space + steward membership if none exists). Synthetic identities only.

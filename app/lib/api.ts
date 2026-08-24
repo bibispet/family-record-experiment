@@ -14,38 +14,6 @@ export class HttpError extends Error {
   }
 }
 
-const USER_ID_HEADER = "oai-authenticated-user-id";
-const USER_EMAIL_HEADER = "oai-authenticated-user-email";
-const USER_FULL_NAME_HEADER = "oai-authenticated-user-full-name";
-const USER_FULL_NAME_ENCODING_HEADER = "oai-authenticated-user-full-name-encoding";
-
-// Legacy header-only parser — retained for backwards compatibility and for
-// the existing unit test that asserts header parsing. New code should use
-// app/lib/identity's provider-aware helpers (getViewer / getApiActorFromRequest)
-// which respect the configured IdentityProvider and default to denying.
-// This parsing is intentionally duplicated in headerIdentityProvider; keep
-// them in sync (trim, lowercase email, percent-encoded display name).
-export function getApiActor(request: Request): ApiActor {
-  const authSubject = request.headers.get(USER_ID_HEADER)?.trim();
-  const email = request.headers.get(USER_EMAIL_HEADER)?.trim().toLowerCase();
-  if (!authSubject || !email) {
-    throw new HttpError(401, "Sign in to continue.", "authentication_required");
-  }
-
-  const encodedName = request.headers.get(USER_FULL_NAME_HEADER);
-  const encoding = request.headers.get(USER_FULL_NAME_ENCODING_HEADER);
-  let fullName: string | null = null;
-  if (encodedName && encoding === "percent-encoded-utf-8") {
-    try {
-      fullName = decodeURIComponent(encodedName).trim() || null;
-    } catch {
-      fullName = null;
-    }
-  }
-
-  return { authSubject, email, displayName: fullName ?? email };
-}
-
 export function assertSafeMutation(request: Request, expectedContentType?: "json" | "multipart") {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) {
