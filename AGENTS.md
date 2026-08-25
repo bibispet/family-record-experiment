@@ -38,7 +38,8 @@ npm test           # build → unit → rendered-html (always run all three)
 - `npm test` builds first because `tests/rendered-html.test.mjs` imports
   `dist/server/index.js` — `npm run test:render` alone fails without a fresh
   build. Prefer plain `npm test`.
-- Test runner is node:test, not vitest/jest. Single unit suite:
+- Test runner is node:test, not vitest/jest. `test:unit` runs every
+  `tests/*.test.ts` — currently six suites. Run one with
   `npx tsx --test tests/authz.test.ts`.
 - Live smoke test against a running dev server: `npm run test:live` (URL via
   `FAMILY_RECORD_TEST_URL`, default `http://[::1]:3000`).
@@ -70,7 +71,7 @@ npm test           # build → unit → rendered-html (always run all three)
   headers)**. Trusting `oai-*` from an untrusted proxy permits
   impersonation; it is explicit opt-in (`IDENTITY_PROVIDER=header`),
   not the default.
-- The local adapter is structurally confined to development: it refuses to
+- The local adapter is guarded by configuration, not by structure: it refuses to
   initialise (throws) unless `NODE_ENV` is `development` or `test` **and**
   `FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1`, and re-checks on every resolution.
   Unknown/absent `NODE_ENV` is treated as production. Never enable it where
@@ -79,7 +80,10 @@ npm test           # build → unit → rendered-html (always run all three)
   returns null, API requests get 401, and `/family` fails closed instead of
   redirecting. Vendor URLs (`/signin-with-chatgpt`) live in the header
   adapter alone.
-- Multi-space requests target a space via the `x-family-space-id` header.
+- Multi-space requests target a space two different ways, which is an
+  inconsistency worth resolving: `app/lib/api.ts` reads an
+  `x-family-space-id` header, while `app/api/family/route.ts` reads a
+  `?space=` query parameter.
 - Opening `/family` while authenticated writes to D1 (auto-creates a personal
   space + steward membership if none exists). Synthetic identities only.
 
@@ -105,8 +109,9 @@ The suite enforces these; do not "fix" them. Each is a consequence of the
 doctrine above:
 
 - Protected responses always set `Cache-Control: private, no-store`.
-- Anonymous requests → 401; authenticated-but-unauthorized IDs →
-  non-disclosing 404.
+- Anonymous API requests → 401. Anonymous requests to the rendered `/family`
+  page → a sign-in redirect under the header adapter, 401 under `deny`.
+  Authenticated-but-unauthorized IDs → non-disclosing 404.
 - Cross-origin mutations rejected (`assertSafeMutation`).
 - A relationship never grants access or custodianship; relationships are
   returned only when both endpoints are readable.
@@ -129,8 +134,3 @@ doctrine above:
   changes require explicit owner review.
 - Validation order: `typecheck` → `lint` → `test`.
 
-## Repo note
-
-This working copy came from a GitHub archive (no `.git` directory);
-PROVENANCE.md's tree hash stands in for history. Git commands will fail until
-a repo is initialized here.

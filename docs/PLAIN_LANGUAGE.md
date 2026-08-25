@@ -36,8 +36,14 @@ to the record later never quietly widens a handout that already exists.
 
 ## What it deliberately does not do
 
-There is no news feed, no "likes", no follower counts, no advertising, and no
-activity tracking. That is on purpose. This is a family drawer, not a stage.
+There is no news feed, no "likes", no follower counts, no advertising, and
+nothing that follows you around other websites. That is on purpose. This is a
+family drawer, not a stage.
+
+What it *does* keep is a record of who did what, and when — who added a
+person, who wrote a story, who shared what with whom. That record is
+permanent and cannot be edited or removed by anyone, including whoever runs
+the software.
 
 ## Things you should know before you open it
 
@@ -45,9 +51,13 @@ activity tracking. That is on purpose. This is a family drawer, not a stage.
 your name and email address are saved, and a family space is created for you.
 Looking is not the same as leaving no trace.
 
-**Nothing can be deleted.** There is no way to remove a person once added.
-A relationship can be marked as ended, but both people and the history of the
-change are kept permanently. Add carefully.
+**People cannot be removed.** Once someone is added to the record there is no
+way to delete them. A relationship can be marked as ended, but both people
+and the history of that change are kept permanently. Add carefully.
+
+Some things do get removed: revoking a share clears the recipient's access,
+and photographs or voice notes that fail to upload are cleaned away. But
+nothing you successfully add about a person can be taken back out.
 
 **Nothing happens automatically when a child turns 18.** Handing control of a
 young person's record over to them is deliberately left as a decision for a
