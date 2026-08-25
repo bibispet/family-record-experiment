@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { chatGPTSignInPath, getChatGPTUser } from "./chatgpt-auth";
+import { getRscViewer, getSignInPath } from "./lib/identity";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const user = await getChatGPTUser();
-  const recordPath = user ? "/family" : chatGPTSignInPath("/family");
+  const viewer = await getRscViewer();
+  const recordPath = viewer ? "/family" : getSignInPath("/family");
 
   return (
     <main className="welcome-shell">
@@ -21,7 +21,7 @@ export default async function Home() {
           <span>Family Record Experiment</span>
         </Link>
         <a className="button button-secondary" href={recordPath}>
-          {user ? "Open family record" : "Sign in"}
+          {viewer ? "Open family record" : "Sign in"}
         </a>
       </nav>
 
@@ -35,7 +35,7 @@ export default async function Home() {
           </p>
           <div className="welcome-actions">
             <a className="button button-primary" href={recordPath}>
-              {user ? "Open your family record" : "Start your family record"}
+              {viewer ? "Open your family record" : "Start your family record"}
             </a>
             <span className="privacy-note">Private by default. No in-app analytics, feed, likes, or advertising.</span>
           </div>

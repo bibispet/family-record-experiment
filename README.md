@@ -37,22 +37,18 @@ instance offline and publish a warning as soon as reasonably practicable, even
 when a code fix is unavailable. Copies already downloaded cannot be recalled.
 This is a commitment to containment, not repair.
 
-## Platform limitation
+## Identity boundary
 
-This application is coupled to the OpenAI Sites hosting environment.
-`app/chatgpt-auth.ts` reads identity headers injected by the Sites sign-in
-dispatcher and is the project's only authentication mechanism. There is no
-local login, password, or session system.
+Authentication is selected through the provider-agnostic boundary in
+`app/lib/identity.ts`. The default provider denies every inbound identity
+header. A deployment behind the OpenAI Sites dispatcher may explicitly select
+`IDENTITY_PROVIDER=header`; accepting those headers from an untrusted proxy
+would permit impersonation.
 
-A clone can run the documented development commands, but it is not a
-standalone authenticated service. A real deployment needs an equivalent
-trusted identity boundary; accepting these headers directly from visitors
-would permit impersonation. Making the application host-independent requires
-designing and implementing an authentication layer that does not currently
-exist.
-
-As currently designed, every person who signs in to view or manage protected
-family records needs an account accepted by the OpenAI Sites sign-in system.
+Local development may select `IDENTITY_PROVIDER=local`. That adapter is
+enabled by a compile-time capability emitted only by Vite's development
+server. Production builds hard-code the capability off and fail if `local` is
+selected. This is not a password or general-purpose session system.
 
 Opening `/family` while authenticated is not read-only: the application stores
 the platform subject and email in D1 and, when no steward membership exists,
@@ -66,7 +62,7 @@ deployments.
 - Cloudflare D1 (SQLite) for people, permissions, stories, audit metadata, and
   custodianship planning
 - Private Cloudflare R2 binding for media bytes
-- Dispatch-owned Sign in with ChatGPT for authentication
+- Provider-selected server-side identity boundary
 - Drizzle schema and checked-in SQLite migration
 - Node test runner, TSX, TypeScript, and ESLint
 
@@ -82,17 +78,15 @@ npm ci
 npm run dev
 ```
 
-The welcome page is anonymous. The `/family` page uses identity headers
-supplied by the Sites sign-in dispatcher. For local API-only development, send
-non-production test values for:
+The welcome page is anonymous. For local API-only development, start the Vite
+development server with `IDENTITY_PROVIDER=local` and send synthetic values
+for `x-local-subject-id`, `x-local-email`, and optional
+`x-local-display-name`. The adapter cannot initialise in a production build.
 
-- `oai-authenticated-user-id`
-- `oai-authenticated-user-email`
-- optional percent-encoded `oai-authenticated-user-full-name`
-
-Do not trust or expose these headers behind a proxy that lets a visitor set
-them directly. Authentication headers identify a user; every route still makes
-its own authorization decision.
+For a Sites deployment, explicitly select `IDENTITY_PROVIDER=header`; only the
+trusted dispatcher may supply the `oai-authenticated-user-*` headers.
+Authentication identifies a user; every route still makes its own server-side
+authorization decision.
 
 ## Data and permission model
 
@@ -145,7 +139,7 @@ npm test
 custodianship, API, and upload suites, then directly exercises every protected
 route without a session to verify denial.
 
-The current suite contains 36 unit tests and 12 rendered/access-control tests.
+The current suite contains 42 unit tests and 14 rendered/access-control tests.
 They are evidence only for the properties they exercise. Nobody independent
 selected which properties to test, so the suite cannot establish that omitted
 properties are safe.

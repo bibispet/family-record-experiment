@@ -14,23 +14,77 @@ async function request(path, init = {}) {
   );
 }
 
+async function withProvider(value, run) {
+  const previousIdentity = process.env.IDENTITY_PROVIDER;
+  const previousAuth = process.env.AUTH_PROVIDER;
+  if (value === undefined) delete process.env.IDENTITY_PROVIDER;
+  else process.env.IDENTITY_PROVIDER = value;
+  delete process.env.AUTH_PROVIDER;
+  try {
+    return await run();
+  } finally {
+    if (previousIdentity === undefined) delete process.env.IDENTITY_PROVIDER;
+    else process.env.IDENTITY_PROVIDER = previousIdentity;
+    if (previousAuth === undefined) delete process.env.AUTH_PROVIDER;
+    else process.env.AUTH_PROVIDER = previousAuth;
+  }
+}
+
 test("renders the finished product welcome page", async () => {
-  const response = await request("/", { headers: { accept: "text/html" } });
-  assert.equal(response.status, 200);
-  const html = await response.text();
-  assert.match(html, /<title>Family Record Experiment<\/title>/i);
-  assert.match(html, /Keep the people and stories that make you/);
-  assert.match(html, /Private by default/);
-  assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+  await withProvider(undefined, async () => {
+    const response = await request("/", { headers: { accept: "text/html" } });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<title>Family Record Experiment<\/title>/i);
+    assert.match(html, /Keep the people and stories that make you/);
+    assert.match(html, /Private by default/);
+    assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+  });
 });
 
-test("redirects anonymous family pages to dispatch-owned sign in", async () => {
-  const response = await request("/family", {
-    headers: { accept: "text/html" },
-    redirect: "manual",
+test("default deny provider redirects anonymous family pages without a vendor URL", async () => {
+  await withProvider(undefined, async () => {
+    const response = await request("/family", {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.ok([302, 303, 307, 308].includes(response.status));
+    assert.equal(response.headers.get("location"), "/");
   });
-  assert.ok([302, 303, 307, 308].includes(response.status));
-  assert.match(response.headers.get("location") ?? "", /^\/signin-with-chatgpt\?return_to=/);
+});
+
+test("selected header provider retains the dispatch-owned sign-in path", async () => {
+  await withProvider("header", async () => {
+    const response = await request("/family", {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.ok([302, 303, 307, 308].includes(response.status));
+    assert.match(response.headers.get("location") ?? "", /^\/signin-with-chatgpt\?return_to=/);
+  });
+});
+
+test("production build fails loudly when configured with the local provider", async () => {
+  await withProvider("local", async () => {
+    const withoutIdentity = await request("/api/family");
+    assert.equal(withoutIdentity.status, 500);
+    assert.deepEqual(await withoutIdentity.json(), {
+      error: "Something went wrong. Please try again.",
+      code: "internal_error",
+    });
+
+    const withSpoofedIdentity = await request("/api/family", {
+      headers: {
+        "x-local-subject-id": "spoofed-subject",
+        "x-local-email": "spoofed@example.test",
+      },
+    });
+    assert.equal(withSpoofedIdentity.status, 500);
+    assert.deepEqual(await withSpoofedIdentity.json(), {
+      error: "Something went wrong. Please try again.",
+      code: "internal_error",
+    });
+  });
 });
 
 const protectedRequests = [
@@ -48,11 +102,13 @@ const protectedRequests = [
 
 for (const [path, init] of protectedRequests) {
   test(`anonymous request is denied without leaking data: ${path}`, async () => {
-    const response = await request(path, init);
-    assert.equal(response.status, 401);
-    assert.match(response.headers.get("cache-control") ?? "", /private, no-store/);
-    const body = await response.json();
-    assert.equal(body.code, "authentication_required");
-    assert.deepEqual(Object.keys(body).sort(), ["code", "error"]);
+    await withProvider(undefined, async () => {
+      const response = await request(path, init);
+      assert.equal(response.status, 401);
+      assert.match(response.headers.get("cache-control") ?? "", /private, no-store/);
+      const body = await response.json();
+      assert.equal(body.code, "authentication_required");
+      assert.deepEqual(Object.keys(body).sort(), ["code", "error"]);
+    });
   });
 }

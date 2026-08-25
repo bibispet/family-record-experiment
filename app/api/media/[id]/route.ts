@@ -1,8 +1,9 @@
-import { cleanId, getApiActor, routeError } from "../../../lib/api";
+import { cleanId, routeError } from "../../../lib/api";
+import { getApiActorFromRequest } from "../../../lib/identity";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const actor = getApiActor(request);
+    const actor = getApiActorFromRequest(request);
     const { getReadableMedia } = await import("../../../lib/family-store");
     const { id } = await context.params;
     const spaceId = new URL(request.url).searchParams.get("space") ?? undefined;
