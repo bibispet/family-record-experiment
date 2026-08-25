@@ -25,12 +25,22 @@ test("renders the finished product welcome page", async () => {
 });
 
 test("redirects anonymous family pages to dispatch-owned sign in", async () => {
-  const response = await request("/family", {
-    headers: { accept: "text/html" },
-    redirect: "manual",
-  });
-  assert.ok([302, 303, 307, 308].includes(response.status));
-  assert.match(response.headers.get("location") ?? "", /^\/signin-with-chatgpt\?return_to=/);
+  // The vendor sign-in destination belongs to the header adapter. The default
+  // deny provider offers no sign-in URL at all, so this redirect behavior is
+  // asserted with the header adapter explicitly selected.
+  const previous = process.env.IDENTITY_PROVIDER;
+  process.env.IDENTITY_PROVIDER = "header";
+  try {
+    const response = await request("/family", {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.ok([302, 303, 307, 308].includes(response.status));
+    assert.match(response.headers.get("location") ?? "", /^\/signin-with-chatgpt\?return_to=/);
+  } finally {
+    if (previous === undefined) delete process.env.IDENTITY_PROVIDER;
+    else process.env.IDENTITY_PROVIDER = previous;
+  }
 });
 
 const protectedRequests = [

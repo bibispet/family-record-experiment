@@ -1,26 +1,57 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertSafeMutation, cleanDate, getApiActor, HttpError, noStoreJson } from "../app/lib/api";
+import { assertSafeMutation, cleanDate, HttpError, noStoreJson } from "../app/lib/api";
+import { getApiActorFromRequest } from "../app/lib/identity";
 
-test("trusted identity headers resolve an API actor", () => {
-  const request = new Request("https://record.test/api/family", {
-    headers: {
-      "oai-authenticated-user-id": "subject-1",
-      "oai-authenticated-user-email": "Family@Example.test",
-      "oai-authenticated-user-full-name": "Example%20User",
-      "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
-    },
-  });
-  assert.deepEqual(getApiActor(request), {
-    authSubject: "subject-1",
-    email: "family@example.test",
-    displayName: "Example User",
+// Identity resolution is configuration-driven; these tests opt into the
+// header adapter explicitly and restore the environment afterwards.
+function withHeaderProvider<T>(fn: () => T): T {
+  const prev = process.env.IDENTITY_PROVIDER;
+  process.env.IDENTITY_PROVIDER = "header";
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete process.env.IDENTITY_PROVIDER;
+    else process.env.IDENTITY_PROVIDER = prev;
+  }
+}
+
+test("trusted identity headers resolve an API actor when the header provider is selected", () => {
+  withHeaderProvider(() => {
+    const request = new Request("https://record.test/api/family", {
+      headers: {
+        "oai-authenticated-user-id": "subject-1",
+        "oai-authenticated-user-email": "Family@Example.test",
+        "oai-authenticated-user-full-name": "Example%20User",
+        "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+      },
+    });
+    assert.deepEqual(getApiActorFromRequest(request), {
+      authSubject: "subject-1",
+      email: "family@example.test",
+      displayName: "Example User",
+    });
   });
 });
 
 test("missing identity is rejected before resource lookup", () => {
+  withHeaderProvider(() => {
+    assert.throws(
+      () => getApiActorFromRequest(new Request("https://record.test/api/family")),
+      (error: unknown) => error instanceof HttpError && error.status === 401,
+    );
+  });
+});
+
+test("trusted oai-* headers do not resolve an actor under the default deny provider", () => {
+  const request = new Request("https://record.test/api/family", {
+    headers: {
+      "oai-authenticated-user-id": "subject-1",
+      "oai-authenticated-user-email": "Family@Example.test",
+    },
+  });
   assert.throws(
-    () => getApiActor(new Request("https://record.test/api/family")),
+    () => getApiActorFromRequest(request),
     (error: unknown) => error instanceof HttpError && error.status === 401,
   );
 });

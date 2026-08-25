@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireChatGPTUser } from "../chatgpt-auth";
+import { requireRscViewer, viewerToApiActor } from "../lib/identity";
 import FamilyDashboard, { type FamilyDashboardData, type FamilyViewer } from "./FamilyDashboard";
 
 export const dynamic = "force-dynamic";
@@ -15,14 +15,10 @@ export default async function FamilyPage({
 }: {
   searchParams: Promise<{ space?: string | string[] }>;
 }) {
-  const signedIn = await requireChatGPTUser("/family");
+  const viewer = await requireRscViewer("/family");
   const { getFamilySnapshot } = await import("../lib/family-store");
   const requested = (await searchParams).space;
-  const snapshot = await getFamilySnapshot({
-    authSubject: signedIn.userId,
-    email: signedIn.email.toLowerCase(),
-    displayName: signedIn.displayName,
-  }, typeof requested === "string" ? requested : undefined);
+  const snapshot = await getFamilySnapshot(viewerToApiActor(viewer), typeof requested === "string" ? requested : undefined);
 
   return (
     <FamilyDashboard

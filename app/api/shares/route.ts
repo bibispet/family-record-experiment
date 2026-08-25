@@ -1,8 +1,9 @@
-import { assertSafeMutation, cleanId, cleanText, getApiActor, HttpError, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../lib/api";
+import { assertSafeMutation, cleanId, cleanText, HttpError, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../lib/api";
+import { getApiActorFromRequest } from "../../lib/identity";
 
 export async function POST(request: Request) {
   try {
-    const actor = getApiActor(request);
+    const actor = getApiActorFromRequest(request);
     const { createShare } = await import("../../lib/family-store");
     assertSafeMutation(request, "json");
     const body = await readJsonObject(request);
