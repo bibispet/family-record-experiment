@@ -1,5 +1,6 @@
 /** Cloudflare Worker entry point for Family Record Experiment. */
 import handler from "vinext/server/app-router-entry";
+import { primeIdentityEnv } from "../app/lib/identity";
 
 interface Env {
   ASSETS?: Fetcher;
@@ -14,6 +15,9 @@ interface ExecutionContext {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Worker vars (e.g. IDENTITY_PROVIDER) are read through cloudflare:workers,
+    // not process.env; resolve them once before the first request.
+    await primeIdentityEnv();
     return withSecurityHeaders(await handler.fetch(request, env, ctx));
   },
 };

@@ -62,7 +62,9 @@ npm test           # build → unit → rendered-html (always run all three)
   viewer is `getIdentityProvider()` / `getViewer` / `getApiActorFromRequest` /
   `getRscViewer` / `requireRscViewer`. The old bypasses (`app/chatgpt-auth.ts`,
   the raw `getApiActor` parser in `app/lib/api.ts`) have been deleted.
-- Selection via `IDENTITY_PROVIDER` (or `AUTH_PROVIDER`) env var:
+- Selection via `IDENTITY_PROVIDER` (or `AUTH_PROVIDER`), read from the
+  Cloudflare Workers environment (`cloudflare:workers`, primed by the Worker
+  entry) with `process.env` as the fallback outside workerd:
   `header` / `oai` / `chatgpt` → header adapter, `local` / `dev` →
   local adapter, **default → `deny` (refuses to trust any inbound identity
   headers)**. Trusting `oai-*` from an untrusted proxy permits

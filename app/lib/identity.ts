@@ -23,10 +23,47 @@ const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
 // assertLocalIdentityDevelopmentOnly for why this alone is not sufficient.
 const LOCAL_IDENTITY_FLAG = "FAMILY_RECORD_ALLOW_LOCAL_IDENTITY";
 
+// Provider configuration can live in two places depending on the runtime:
+// Cloudflare Worker vars (read through the `cloudflare:workers` env, the same
+// module-level environment getBindings() uses — workerd has no process.env)
+// and ordinary process.env outside workerd (unit tests, Node harnesses).
+// The Workers env is reached with a guarded dynamic import so that loading
+// this module never fails outside workerd; the Worker entry awaits
+// primeIdentityEnv() before the first request, after which the synchronous
+// lookups below see Worker vars.
+let workersEnvState: { resolved: boolean; env: Record<string, unknown> | null } = {
+  resolved: false,
+  env: null,
+};
+
+async function loadWorkersEnv(): Promise<Record<string, unknown> | null> {
+  try {
+    const mod = (await import("cloudflare:workers")) as unknown as { env?: unknown };
+    if (mod.env && typeof mod.env === "object") {
+      return mod.env as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function primeIdentityEnv(): Promise<void> {
+  if (!workersEnvState.resolved) {
+    workersEnvState = { resolved: true, env: await loadWorkersEnv() };
+  }
+}
+
 function readEnv(name: string): string {
-  if (typeof process === "undefined") return "";
-  const value = process.env[name];
-  return value === undefined || value === null ? "" : String(value);
+  if (workersEnvState.resolved && workersEnvState.env) {
+    const value = workersEnvState.env[name];
+    if (value !== undefined && value !== null && typeof value !== "object") return String(value);
+  }
+  if (typeof process !== "undefined") {
+    const value = process.env[name];
+    if (value !== undefined && value !== null) return String(value);
+  }
+  return "";
 }
 
 // The local adapter trusts ordinary request headers that any visitor can
