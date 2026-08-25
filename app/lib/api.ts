@@ -4,11 +4,6 @@ export type ApiActor = {
   displayName: string;
 };
 
-const USER_ID_HEADER = "oai-authenticated-user-id";
-const USER_EMAIL_HEADER = "oai-authenticated-user-email";
-const USER_FULL_NAME_HEADER = "oai-authenticated-user-full-name";
-const USER_FULL_NAME_ENCODING_HEADER = "oai-authenticated-user-full-name-encoding";
-
 export class HttpError extends Error {
   constructor(
     public readonly status: number,
@@ -17,27 +12,6 @@ export class HttpError extends Error {
   ) {
     super(message);
   }
-}
-
-export function getApiActor(request: Request): ApiActor {
-  const authSubject = request.headers.get(USER_ID_HEADER)?.trim();
-  const email = request.headers.get(USER_EMAIL_HEADER)?.trim().toLowerCase();
-  if (!authSubject || !email) {
-    throw new HttpError(401, "Sign in to continue.", "authentication_required");
-  }
-
-  const encodedName = request.headers.get(USER_FULL_NAME_HEADER);
-  const encoding = request.headers.get(USER_FULL_NAME_ENCODING_HEADER);
-  let fullName: string | null = null;
-  if (encodedName && encoding === "percent-encoded-utf-8") {
-    try {
-      fullName = decodeURIComponent(encodedName).trim() || null;
-    } catch {
-      fullName = null;
-    }
-  }
-
-  return { authSubject, email, displayName: fullName ?? email };
 }
 
 export function assertSafeMutation(request: Request, expectedContentType?: "json" | "multipart") {

@@ -1,8 +1,9 @@
-import { assertSafeMutation, cleanId, cleanText, getApiActor, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../../lib/api";
+import { assertSafeMutation, cleanId, cleanText, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../../lib/api";
+import { getApiActorFromRequest } from "../../../lib/identity";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const actor = getApiActor(request);
+    const actor = getApiActorFromRequest(request);
     const { updatePerson } = await import("../../../lib/family-store");
     assertSafeMutation(request, "json");
     const { id } = await context.params;

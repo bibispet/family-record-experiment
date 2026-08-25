@@ -1,8 +1,9 @@
-import { assertSafeMutation, cleanDate, cleanText, getApiActor, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../lib/api";
+import { assertSafeMutation, cleanDate, cleanText, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../lib/api";
+import { getApiActorFromRequest } from "../../lib/identity";
 
 export async function POST(request: Request) {
   try {
-    const actor = getApiActor(request);
+    const actor = getApiActorFromRequest(request);
     const { createPerson } = await import("../../lib/family-store");
     assertSafeMutation(request, "json");
     const body = await readJsonObject(request);
