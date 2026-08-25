@@ -37,22 +37,32 @@ instance offline and publish a warning as soon as reasonably practicable, even
 when a code fix is unavailable. Copies already downloaded cannot be recalled.
 This is a commitment to containment, not repair.
 
-## Platform limitation
+## Authentication
 
-This application is coupled to the OpenAI Sites hosting environment.
-`app/chatgpt-auth.ts` reads identity headers injected by the Sites sign-in
-dispatcher and is the project's only authentication mechanism. There is no
-local login, password, or session system.
+Authentication is provider-agnostic. `app/lib/identity.ts` defines one
+interface with three adapters, selected by an `IDENTITY_PROVIDER` value read
+from the Worker environment:
 
-A clone can run the documented development commands, but it is not a
-standalone authenticated service. A real deployment needs an equivalent
-trusted identity boundary; accepting these headers directly from visitors
-would permit impersonation. Making the application host-independent requires
-designing and implementing an authentication layer that does not currently
-exist.
+- `header` — trusts `oai-*` identity headers supplied by a trusted sign-in
+  dispatcher. Explicit opt-in only. Accepting these headers from an untrusted
+  proxy would permit impersonation.
+- `local` — development only. Refuses to initialise unless `NODE_ENV` is
+  `development` or `test` **and** `FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1`,
+  re-checked on every resolution rather than once at startup.
+- `deny` — the default. Trusts nothing, offers no sign-in destination, and
+  returns 401.
 
-As currently designed, every person who signs in to view or manage protected
-family records needs an account accepted by the OpenAI Sites sign-in system.
+Authentication establishes who a request is from. It never establishes what
+that person may see; every route makes its own server-side authorization
+decision.
+
+**No deployment configuration currently supplies `IDENTITY_PROVIDER`.**
+`.openai/hosting.json` declares only the D1 and R2 bindings, and there is no
+`wrangler.toml`. Until a value is supplied, selection falls through to `deny`
+and nobody can sign in. Choosing a provider and a host is a decision that has
+not been made.
+
+The application has not been deployed anywhere.
 
 Opening `/family` while authenticated is not read-only: the application stores
 the platform subject and email in D1 and, when no steward membership exists,

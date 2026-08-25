@@ -8,8 +8,15 @@
   NOT linked; decision made by opencode session after owner gave no directive
   ("experience is not binary"), under standing rule of preserving verified
   work reversibly. Reversible by deleting the single file.
-- Verified: all ten behavioral claims in the document checked against code
-  (`app/lib/authz.ts`, route table, test suite) — see session log.
+- Verification, as recorded at the time: all ten behavioural claims checked
+  against code (`app/lib/authz.ts`, route table, test suite).
+- Correction, 2026-08-25: that check was not sound. Two claims were false and
+  were not caught. "No activity tracking" contradicted the `audit_events`
+  table in `db/schema.ts`. "Nothing can be deleted" contradicted the
+  `space_memberships` deletion in `app/lib/family-store.ts` and the R2 object
+  cleanup in `db/runtime.ts`. Both were corrected in the document. The
+  original claim is kept here rather than removed: a record of a check that
+  missed something is more useful than a clean one.
 - SHA-256 (measured, both files byte-identical):
   `E93136E19D39887629A26A09662119B525B814B079AE55FFDAEAE13E028A05CF`
 - Size: 2703 bytes
