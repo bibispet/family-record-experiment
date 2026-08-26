@@ -22,6 +22,21 @@ const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
 // Set to "1" to allow the local development adapter. See
 // assertLocalIdentityDevelopmentOnly for why this alone is not sufficient.
 const LOCAL_IDENTITY_FLAG = "FAMILY_RECORD_ALLOW_LOCAL_IDENTITY";
+export const LOCAL_IDENTITY_COOKIE_NAME = "family_record_local_identity";
+const LOCAL_IDENTITY_COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60;
+const DEV_SIGN_IN_PATH = "/dev/sign-in";
+const DEV_SIGN_OUT_PATH = "/dev/sign-out";
+const LOCAL_RESERVED_PATHS = [DEV_SIGN_IN_PATH, DEV_SIGN_OUT_PATH];
+const LOCAL_IDENTITY_HEADER_NAMES = [
+  "x-local-subject",
+  "x-local-subject-id",
+  "x-dev-user-id",
+  "x-local-email",
+  "x-dev-user-email",
+  "x-local-display-name",
+  "x-local-name",
+  "x-dev-user-name",
+] as const;
 
 // Provider configuration can live in two places depending on the runtime:
 // Cloudflare Worker vars (read through the `cloudflare:workers` env, the same
@@ -72,7 +87,7 @@ function readEnv(name: string): string {
 // runtime identifies as development/test AND an explicit opt-in flag is set,
 // and it fails loudly (throws) rather than silently falling back. A deployed
 // Worker has neither, and unknown NODE_ENV values are treated as hostile.
-function assertLocalIdentityDevelopmentOnly(): void {
+export function assertLocalIdentityDevelopmentOnly(): void {
   const nodeEnv = readEnv("NODE_ENV").toLowerCase().trim();
   if (nodeEnv !== "development" && nodeEnv !== "test") {
     throw new Error(
@@ -94,6 +109,54 @@ function safeDecodeURIComponent(value: string): string | null {
   }
 }
 
+function normalizeLocalIdentityCookiePayload(value: unknown): Viewer | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const payload = value as Record<string, unknown>;
+  const subjectId = typeof payload.subjectId === "string" ? payload.subjectId.trim() : "";
+  const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+  if (!subjectId || !email) return null;
+
+  const rawDisplay = typeof payload.displayName === "string" ? payload.displayName.trim() : "";
+  return { subjectId, email, displayName: rawDisplay || null };
+}
+
+function readCookie(headers: Headers, name: string): string | null {
+  const cookieHeader = headers.get("cookie");
+  if (!cookieHeader) return null;
+
+  for (const part of cookieHeader.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    return part.slice(separator + 1).trim();
+  }
+  return null;
+}
+
+function resolveLocalIdentityCookie(headers: Headers): Viewer | null {
+  assertLocalIdentityDevelopmentOnly();
+  const encoded = readCookie(headers, LOCAL_IDENTITY_COOKIE_NAME);
+  if (!encoded) return null;
+
+  try {
+    return normalizeLocalIdentityCookiePayload(JSON.parse(decodeURIComponent(encoded)));
+  } catch {
+    return null;
+  }
+}
+
+export function serializeLocalIdentityCookie(viewer: Viewer): string {
+  assertLocalIdentityDevelopmentOnly();
+  const normalized = normalizeLocalIdentityCookiePayload(viewer);
+  if (!normalized) throw new Error("identity: refusing to serialize an invalid local identity cookie");
+  const value = encodeURIComponent(JSON.stringify(normalized));
+  return `${LOCAL_IDENTITY_COOKIE_NAME}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${LOCAL_IDENTITY_COOKIE_MAX_AGE_SECONDS}`;
+}
+
+export function serializeClearedLocalIdentityCookie(): string {
+  assertLocalIdentityDevelopmentOnly();
+  return `${LOCAL_IDENTITY_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
 // Shared return_to sanitizer. Each adapter supplies the auth paths that must
 // never be used as a return target (open-redirect/loop protection), so no
 // adapter needs to know another adapter's routes.
@@ -108,6 +171,11 @@ function safeRelativeReturnTo(value: string, reservedPaths: readonly string[]): 
   if (url.origin !== "https://app.local") return "/";
   if (reservedPaths.includes(url.pathname)) return "/";
   return `${url.pathname}${url.search}${url.hash}`;
+}
+
+export function safeLocalIdentityReturnTo(value: string): string {
+  assertLocalIdentityDevelopmentOnly();
+  return safeRelativeReturnTo(value, LOCAL_RESERVED_PATHS);
 }
 
 function createHeaderIdentityProvider(): IdentityProvider {
@@ -145,14 +213,11 @@ function createLocalIdentityProvider(): IdentityProvider {
   // adapter is constructed and again on every resolution, so holding a
   // reference to it cannot outlive the safety conditions.
   assertLocalIdentityDevelopmentOnly();
-  const DEV_SIGN_IN_PATH = "/dev/sign-in";
-  const DEV_SIGN_OUT_PATH = "/dev/sign-out";
-  const reservedPaths = [DEV_SIGN_IN_PATH, DEV_SIGN_OUT_PATH];
-
   return {
     name: "local",
     resolveViewer(headers: Headers): Viewer | null {
       assertLocalIdentityDevelopmentOnly();
+      const hasLocalIdentityHeader = LOCAL_IDENTITY_HEADER_NAMES.some((name) => headers.has(name));
       const subjectId =
         headers.get("x-local-subject")?.trim() ||
         headers.get("x-local-subject-id")?.trim() ||
@@ -163,7 +228,9 @@ function createLocalIdentityProvider(): IdentityProvider {
         headers.get("x-dev-user-email")?.trim() ||
         "";
       const email = emailRaw.toLowerCase();
-      if (!subjectId || !email) return null;
+      if (!subjectId || !email) {
+        return hasLocalIdentityHeader ? null : resolveLocalIdentityCookie(headers);
+      }
 
       const rawDisplay =
         headers.get("x-local-display-name")?.trim() ||
@@ -175,7 +242,7 @@ function createLocalIdentityProvider(): IdentityProvider {
     },
     signInPath(returnTo: string): string | null {
       assertLocalIdentityDevelopmentOnly();
-      const safe = safeRelativeReturnTo(returnTo, reservedPaths);
+      const safe = safeRelativeReturnTo(returnTo, LOCAL_RESERVED_PATHS);
       return `${DEV_SIGN_IN_PATH}?return_to=${encodeURIComponent(safe)}`;
     },
   };

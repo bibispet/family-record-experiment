@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as devSignInRoute from "../app/dev/sign-in/route";
+import * as devSignOutRoute from "../app/dev/sign-out/route";
 import { HttpError } from "../app/lib/api";
 import {
   getApiActorFromRequest,
   getIdentityProvider,
   getSignInPath,
+  LOCAL_IDENTITY_COOKIE_NAME,
+  serializeLocalIdentityCookie,
   type IdentityProvider,
   viewerToApiActor,
   type Viewer,
@@ -61,6 +65,21 @@ const LOCAL_ALLOWED: EnvPatch = {
   FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "1",
 };
 
+const LOCAL_COOKIE_VIEWER: Viewer = {
+  subjectId: "cookie-subject",
+  email: "cookie@example.test",
+  displayName: "Cookie Developer",
+};
+
+function requestCookieFromSetCookie(setCookie: string): string {
+  const separator = setCookie.indexOf(";");
+  return separator < 0 ? setCookie : setCookie.slice(0, separator);
+}
+
+function localIdentityRequestCookie(viewer: Viewer = LOCAL_COOKIE_VIEWER): string {
+  return withEnv(LOCAL_ALLOWED, () => requestCookieFromSetCookie(serializeLocalIdentityCookie(viewer)));
+}
+
 function resolveViewerUnder(env: EnvPatch, entries: Record<string, string>): Viewer | null {
   return withEnv(env, () => getIdentityProvider().resolveViewer(new Headers(entries)));
 }
@@ -83,6 +102,14 @@ const PROTECTED_ROUTES: Array<[string, RequestInit]> = [
 
 const MEDIA_PATH = "/api/media/00000000-0000-4000-8000-000000000001";
 
+const LOCAL_COOKIE_PARITY_ROUTES: Array<[string, RequestInit]> = [
+  ["/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/people/00000000-0000-4000-8000-000000000001", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/relationships", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/people/00000000-0000-4000-8000-000000000001/stories", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/shares", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
+];
+
 async function fetchBuiltWorker(tag: string, path: string, init: RequestInit): Promise<Response> {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("identity-audit", tag);
@@ -94,6 +121,40 @@ async function fetchBuiltWorker(tag: string, path: string, init: RequestInit): P
     },
     { waitUntil() {}, passThroughOnException() {} },
   );
+}
+
+async function assertGuardedRouteUnavailable(tag: string, path: string, init: RequestInit): Promise<void> {
+  try {
+    const response = await fetchBuiltWorker(tag, path, init);
+    assert.ok(response.status >= 500, `${path}: the development guard must fail loudly`);
+    assert.equal(response.headers.get("set-cookie"), null, `${path}: a rejected request must not mutate cookies`);
+    assert.doesNotMatch(await response.text(), /name="subject_id"/i, `${path}: the sign-in form must not render`);
+  } catch (error) {
+    assert.match(String(error), /refusing to initialise the local identity provider|FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1/);
+  }
+}
+
+async function postLocalSignIn(tag: string): Promise<Response> {
+  return fetchBuiltWorker(tag, "/dev/sign-in", {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      origin: "http://localhost",
+    },
+    body: new URLSearchParams({
+      subject_id: "route-subject",
+      email: "Route@Example.test",
+      display_name: "Route Developer",
+      return_to: "/family",
+    }).toString(),
+  });
+}
+
+function withRequestCredentials(init: RequestInit, credentials: Record<string, string>): RequestInit {
+  const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(credentials)) headers.set(name, value);
+  return { ...init, headers };
 }
 
 interface AdapterScenario {
@@ -273,6 +334,36 @@ test("local adapter resolves x-local-* headers only while safely configured", ()
   assert.equal(resolveViewerUnder(LOCAL_ALLOWED, {}), null);
 });
 
+test("local adapter resolves its browser cookie without changing local-header behavior", () => {
+  const cookie = localIdentityRequestCookie();
+  assert.deepEqual(resolveViewerUnder(LOCAL_ALLOWED, { cookie }), LOCAL_COOKIE_VIEWER);
+
+  const headerViewer = resolveViewerUnder(LOCAL_ALLOWED, {
+    cookie,
+    "x-local-subject": "header-subject",
+    "x-local-email": "Header@Example.test",
+    "x-local-display-name": "Header Developer",
+  });
+  assert.deepEqual(headerViewer, {
+    subjectId: "header-subject",
+    email: "header@example.test",
+    displayName: "Header Developer",
+  });
+
+  assert.equal(
+    resolveViewerUnder(LOCAL_ALLOWED, { cookie, "x-local-subject": "incomplete-header" }),
+    null,
+    "an incomplete local-header identity must keep its previous null result instead of borrowing cookie fields",
+  );
+  assert.equal(resolveViewerUnder(LOCAL_ALLOWED, { cookie: `${LOCAL_IDENTITY_COOKIE_NAME}=not-json` }), null);
+});
+
+test("header and deny adapters ignore the local identity cookie", () => {
+  const cookie = localIdentityRequestCookie();
+  assert.equal(resolveViewerUnder({ IDENTITY_PROVIDER: "header" }, { cookie }), null);
+  assert.equal(resolveViewerUnder({}, { cookie }), null);
+});
+
 test("each adapter ignores the other adapter's headers", () => {
   const oaiHeaders = {
     "oai-authenticated-user-id": "subject-oai",
@@ -329,6 +420,224 @@ test("a held local adapter reference cannot outlive the safety conditions", () =
       /refusing to initialise/,
     );
     assert.throws(() => held.signInPath("/family"), /refusing to initialise/);
+  });
+});
+
+test("a local identity cookie is ignored when the development guard is revoked", () => {
+  let held: IdentityProvider;
+  let cookie: string;
+  withEnv(LOCAL_ALLOWED, () => {
+    held = getIdentityProvider();
+    cookie = requestCookieFromSetCookie(serializeLocalIdentityCookie(LOCAL_COOKIE_VIEWER));
+    assert.deepEqual(held.resolveViewer(new Headers({ cookie })), LOCAL_COOKIE_VIEWER);
+  });
+
+  withEnv({ NODE_ENV: "production", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "1" }, () => {
+    assert.throws(
+      () => held.resolveViewer(new Headers({ cookie })),
+      /refusing to initialise the local identity provider outside development/,
+    );
+  });
+  withEnv({ NODE_ENV: "test", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: undefined }, () => {
+    assert.throws(
+      () => held.resolveViewer(new Headers({ cookie })),
+      /FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1/,
+    );
+  });
+});
+
+test("development sign-in and sign-out routes fail loudly outside the local identity guard", async () => {
+  await withEnvAsync(
+    { IDENTITY_PROVIDER: "local", NODE_ENV: "production", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "1" },
+    async () => {
+      await assertGuardedRouteUnavailable("dev-sign-in-production-get", "/dev/sign-in", {
+        method: "GET",
+        headers: { accept: "text/html" },
+      });
+      await assertGuardedRouteUnavailable("dev-sign-in-production-post", "/dev/sign-in", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "http://localhost",
+        },
+        body: "subject_id=blocked&email=blocked%40example.test",
+      });
+      await assertGuardedRouteUnavailable("dev-sign-out-production", "/dev/sign-out", {
+        method: "POST",
+        headers: { origin: "http://localhost" },
+      });
+      for (const method of ["HEAD", "OPTIONS", "PUT", "PATCH", "DELETE"]) {
+        await assertGuardedRouteUnavailable(
+          `dev-sign-in-production-${method.toLowerCase()}`,
+          "/dev/sign-in",
+          { method },
+        );
+        await assertGuardedRouteUnavailable(
+          `dev-sign-out-production-${method.toLowerCase()}`,
+          "/dev/sign-out",
+          { method },
+        );
+      }
+    },
+  );
+
+  await withEnvAsync(
+    { IDENTITY_PROVIDER: "local", NODE_ENV: "development", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: undefined },
+    () => assertGuardedRouteUnavailable("dev-sign-in-flag-off", "/dev/sign-in", { method: "GET" }),
+  );
+});
+
+test("development sign-in guard is re-checked on every request", async () => {
+  const tag = "dev-sign-in-recheck";
+  await withEnvAsync(LOCAL_ALLOWED, async () => {
+    const response = await fetchBuiltWorker(tag, "/dev/sign-in", { method: "GET" });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /name="subject_id"/i);
+  });
+  await withEnvAsync(
+    { IDENTITY_PROVIDER: "local", NODE_ENV: "production", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "1" },
+    () => assertGuardedRouteUnavailable(tag, "/dev/sign-in", { method: "GET" }),
+  );
+});
+
+test("every supported development auth route method invokes the exact local identity guard", async () => {
+  await withEnvAsync(
+    { IDENTITY_PROVIDER: "local", NODE_ENV: "production", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "1" },
+    async () => {
+      const syncHandlers: Array<() => Response> = [
+        () => devSignInRoute.GET(new Request("http://localhost/dev/sign-in")),
+        () => devSignInRoute.HEAD(),
+        () => devSignInRoute.OPTIONS(),
+        () => devSignInRoute.PUT(),
+        () => devSignInRoute.PATCH(),
+        () => devSignInRoute.DELETE(),
+        () => devSignOutRoute.GET(),
+        () => devSignOutRoute.HEAD(),
+        () => devSignOutRoute.OPTIONS(),
+        () => devSignOutRoute.PUT(),
+        () => devSignOutRoute.PATCH(),
+        () => devSignOutRoute.DELETE(),
+      ];
+      for (const handler of syncHandlers) {
+        assert.throws(handler, /refusing to initialise the local identity provider outside development/);
+      }
+      await assert.rejects(
+        devSignInRoute.POST(new Request("http://localhost/dev/sign-in", { method: "POST" })),
+        /refusing to initialise the local identity provider outside development/,
+      );
+      await assert.rejects(
+        devSignOutRoute.POST(new Request("http://localhost/dev/sign-out", { method: "POST" })),
+        /refusing to initialise the local identity provider outside development/,
+      );
+    },
+  );
+});
+
+test("browser sign-in cookie reaches protected routes exactly like local identity headers", async () => {
+  await withEnvAsync(LOCAL_ALLOWED, async () => {
+    const formResponse = await fetchBuiltWorker("dev-sign-in-flow", "/dev/sign-in?return_to=%2Ffamily", {
+      method: "GET",
+      headers: { accept: "text/html" },
+    });
+    assert.equal(formResponse.status, 200);
+    assert.match(formResponse.headers.get("cache-control") ?? "", /private, no-store/);
+    const formHtml = await formResponse.text();
+    assert.match(formHtml, /name="subject_id"/i);
+    assert.match(formHtml, /name="email"/i);
+    assert.match(formHtml, /name="display_name"/i);
+
+    const signInResponse = await postLocalSignIn("dev-sign-in-flow");
+    assert.equal(signInResponse.status, 303);
+    assert.equal(signInResponse.headers.get("location"), "/family");
+    const setCookie = signInResponse.headers.get("set-cookie") ?? "";
+    assert.match(setCookie, new RegExp(`^${LOCAL_IDENTITY_COOKIE_NAME}=`));
+    assert.match(setCookie, /Path=\//i);
+    assert.match(setCookie, /HttpOnly/i);
+    assert.match(setCookie, /SameSite=Lax/i);
+    assert.match(setCookie, /Max-Age=\d+/i);
+    const cookie = requestCookieFromSetCookie(setCookie);
+    assert.deepEqual(getIdentityProvider().resolveViewer(new Headers({ cookie })), {
+      subjectId: "route-subject",
+      email: "route@example.test",
+      displayName: "Route Developer",
+    });
+
+    const localHeaders = {
+      "x-local-subject": "route-subject",
+      "x-local-email": "route@example.test",
+      "x-local-display-name": "Route Developer",
+    };
+    for (const [index, [path, init]] of LOCAL_COOKIE_PARITY_ROUTES.entries()) {
+      const headerResponse = await fetchBuiltWorker(
+        `local-header-parity-${index}`,
+        path,
+        withRequestCredentials(init, localHeaders),
+      );
+      const cookieResponse = await fetchBuiltWorker(
+        `local-cookie-parity-${index}`,
+        path,
+        withRequestCredentials(init, { cookie }),
+      );
+      const headerBody = await headerResponse.text();
+      const cookieBody = await cookieResponse.text();
+      assert.notEqual(headerResponse.status, 401, `${path}: local headers must pass the identity gate`);
+      assert.equal(cookieResponse.status, headerResponse.status, `${path}: cookie/header status parity`);
+      assert.equal(cookieBody, headerBody, `${path}: cookie/header response parity`);
+      assert.doesNotMatch(cookieBody, /authentication_required/, `${path}: cookie must pass the identity gate`);
+    }
+
+    const familyHeaderResponse = await fetchBuiltWorker(
+      "local-header-family-rsc",
+      "/family",
+      withRequestCredentials(
+        { method: "GET", redirect: "manual", headers: { accept: "text/html" } },
+        localHeaders,
+      ),
+    );
+    const familyCookieResponse = await fetchBuiltWorker(
+      "local-cookie-family-rsc",
+      "/family",
+      withRequestCredentials(
+        { method: "GET", redirect: "manual", headers: { accept: "text/html" } },
+        { cookie },
+      ),
+    );
+    for (const [label, response] of [
+      ["headers", familyHeaderResponse],
+      ["cookie", familyCookieResponse],
+    ] as const) {
+      assert.notEqual(response.status, 401, `/family: ${label} identity must pass the RSC identity gate`);
+      assert.doesNotMatch(
+        response.headers.get("location") ?? "",
+        /^\/dev\/sign-in/,
+        `/family: ${label} identity must not be redirected back to local sign-in`,
+      );
+    }
+    assert.equal(familyCookieResponse.status, familyHeaderResponse.status, "/family: cookie/header RSC parity");
+
+    const signOutResponse = await fetchBuiltWorker("dev-sign-in-flow", "/dev/sign-out", {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "http://localhost",
+      },
+      body: "return_to=%2F",
+    });
+    assert.equal(signOutResponse.status, 303);
+    assert.equal(signOutResponse.headers.get("location"), "/");
+    const clearedCookie = signOutResponse.headers.get("set-cookie") ?? "";
+    assert.match(clearedCookie, new RegExp(`^${LOCAL_IDENTITY_COOKIE_NAME}=`));
+    assert.match(clearedCookie, /Path=\//i);
+    assert.match(clearedCookie, /Max-Age=0/i);
+    assert.equal(
+      getIdentityProvider().resolveViewer(new Headers({ cookie: requestCookieFromSetCookie(clearedCookie) })),
+      null,
+    );
+
+    const afterSignOut = await fetchBuiltWorker("dev-sign-in-flow", MEDIA_PATH, { method: "GET" });
+    await assertAuthenticationRequired(afterSignOut, "protected route after local sign-out");
   });
 });
 
