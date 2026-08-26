@@ -9,7 +9,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const { id } = await context.params;
     const body = await readJsonObject(request);
     const displayName = cleanText(body.displayName, "Name", { max: 120 });
-    const person = await updatePerson(actor, cleanId(id), displayName!, requestedSpaceId(request));
+    const birthDate = body.birthDate === undefined ? undefined : body.birthDate === null ? null : cleanText(body.birthDate, "Birth date", { max: 40 }) || null;
+    const person = await updatePerson(actor, cleanId(id), { displayName: displayName!, birthDate }, requestedSpaceId(request));
     return noStoreJson({ person });
   } catch (error) {
     return routeError(error);

@@ -4,7 +4,13 @@ import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import {
   withCreatedPerson,
-  withRenamedPerson,
+  withUpdatedPerson,
+  withUpdatedStory,
+  withDeletedStory,
+  withUpdatedMedia,
+  withDeletedMedia,
+  withUpdatedFamilyName,
+  withUpdatedRelationship,
   withRevokedShare,
   withUnlinkedRelationship,
   type FamilyDashboardData,
@@ -60,6 +66,22 @@ function personName(people: FamilyPerson[], id: string) {
   return people.find((person) => person.id === id)?.displayName ?? "Someone you can see";
 }
 
+function computeAge(birthDate: string | null): string | null {
+  if (!birthDate) return null;
+  try {
+    const birth = new Date(birthDate + "T00:00:00Z");
+    const now = new Date();
+    let age = now.getUTCFullYear() - birth.getUTCFullYear();
+    const monthDiff = now.getUTCMonth() - birth.getUTCMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < birth.getUTCDate())) {
+      age--;
+    }
+    return age >= 0 ? String(age) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function FamilyDashboard({
   viewer,
   initialData,
@@ -74,6 +96,15 @@ export default function FamilyDashboard({
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [pendingUnlinkId, setPendingUnlinkId] = useState<string | null>(null);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
+  const [editingStoryId, setEditingStoryId] = useState<string | null>(null);
+  const [deletingStoryId, setDeletingStoryId] = useState<string | null>(null);
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
+  const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
+  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
+  const [editingRelationshipId, setEditingRelationshipId] = useState<string | null>(null);
+  const [editingFamilyName, setEditingFamilyName] = useState(false);
+  const [auditEvents, setAuditEvents] = useState<{ id: string; action: string; resourceType: string; resourceId: string; occurredAt: string; actorEmail: string | null }[] | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   const managedPeople = useMemo(
     () => data.people.filter((person) => data.access.managedPersonIds.includes(person.id)),
@@ -127,6 +158,86 @@ export default function FamilyDashboard({
     });
   }
 
+  function onEditStory(event: FormEvent<HTMLFormElement>, storyId: string) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const body = String(new FormData(form).get("body") ?? "");
+    void run(async () => {
+      const result = await api<{ story: FamilyStory }>(`/api/stories/${storyId}`, data.familyId, {
+        method: "PATCH",
+        body: JSON.stringify({ body }),
+      });
+      setData((current) => withUpdatedStory(current, storyId, result.story.body));
+      setEditingStoryId(null);
+      return "Story updated.";
+    });
+  }
+
+  function onDeleteStory(storyId: string) {
+    void run(async () => {
+      await api<{ id: string }>(`/api/stories/${storyId}`, data.familyId, { method: "DELETE" });
+      setData((current) => withDeletedStory(current, storyId));
+      setDeletingStoryId(null);
+      return "Story removed from the record.";
+    });
+  }
+
+  function onEditMediaCaption(event: FormEvent<HTMLFormElement>, mediaId: string) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const caption = String(new FormData(form).get("caption") ?? "") || null;
+    void run(async () => {
+      const result = await api<{ media: FamilyMedia }>(`/api/media/${mediaId}`, data.familyId, {
+        method: "PATCH",
+        body: JSON.stringify({ caption }),
+      });
+      setData((current) => withUpdatedMedia(current, mediaId, result.media.caption ?? null));
+      setEditingMediaId(null);
+      return "Caption updated.";
+    });
+  }
+
+  function onDeleteMedia(mediaId: string) {
+    void run(async () => {
+      await api<{ id: string }>(`/api/media/${mediaId}`, data.familyId, { method: "DELETE" });
+      setData((current) => withDeletedMedia(current, mediaId));
+      setDeletingMediaId(null);
+      return "Media removed from the record.";
+    });
+  }
+
+  function onEditRelationship(event: FormEvent<HTMLFormElement>, relationshipId: string) {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    void run(async () => {
+      const body: Record<string, string> = {};
+      const rt = fields.get("relationshipType");
+      const em = fields.get("evidenceMode");
+      if (rt) body.relationshipType = String(rt);
+      if (em) body.evidenceMode = String(em);
+      const result = await api<{ relationship: FamilyRelationship }>(`/api/relationships/${relationshipId}`, data.familyId, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      setData((current) => withUpdatedRelationship(current, relationshipId, result.relationship.relationshipType ?? "", result.relationship.evidenceMode ?? ""));
+      setEditingRelationshipId(null);
+      return "Relationship updated.";
+    });
+  }
+
+  async function fetchAudit() {
+    if (auditEvents !== null) { setAuditEvents(null); return; }
+    setAuditLoading(true);
+    try {
+      const result = await api<{ events: typeof auditEvents }>(`/api/audit`, data.familyId);
+      setAuditEvents(result.events ?? []);
+    } catch {
+      setAuditEvents([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
   function onCreateRelationship(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -163,6 +274,22 @@ export default function FamilyDashboard({
     });
   }
 
+  function onRenameFamily(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    const name = String(fields.get("familyName") ?? "").trim();
+    if (!name) return;
+    void run(async () => {
+      const result = await api<{ space: { id: string; name: string } }>("/api/family", data.familyId, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      setData((current) => withUpdatedFamilyName(current, result.space.name));
+      setEditingFamilyName(false);
+      return `Family renamed to ${result.space.name}.`;
+    });
+  }
+
   function onUploadMedia(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -181,15 +308,17 @@ export default function FamilyDashboard({
 
   function onRenamePerson(event: FormEvent<HTMLFormElement>, personId: string) {
     event.preventDefault();
-    const displayName = String(new FormData(event.currentTarget).get("displayName") ?? "");
+    const fields = new FormData(event.currentTarget);
+    const displayName = String(fields.get("displayName") ?? "");
+    const birthDate = String(fields.get("birthDate") ?? "") || null;
     void run(async () => {
-      const result = await api<{ person: { id: string; displayName: string } }>(`/api/people/${personId}`, data.familyId, {
+      const result = await api<{ person: FamilyPerson }>(`/api/people/${personId}`, data.familyId, {
         method: "PATCH",
-        body: JSON.stringify({ displayName }),
+        body: JSON.stringify({ displayName, birthDate }),
       });
-      setData((current) => withRenamedPerson(current, result.person.id, result.person.displayName));
+      setData((current) => withUpdatedPerson(current, personId, result.person.displayName, result.person.birthDate ?? null, result.person.birthDateAccuracy ?? "unknown"));
       setEditingPersonId(null);
-      return `${result.person.displayName} was updated. The person was not deleted.`;
+      return `Record updated for ${result.person.displayName}.`;
     });
   }
 
@@ -221,7 +350,15 @@ export default function FamilyDashboard({
       <header className="family-dashboard-header">
         <div>
           <p className="eyebrow">Private family record</p>
-          <h1>{data.familyName}</h1>
+          {editingFamilyName ? (
+            <form className="inline-edit" onSubmit={onRenameFamily} style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
+              <input name="familyName" type="text" defaultValue={data.familyName} maxLength={200} required disabled={busy} />
+              <button className="button button-primary" type="submit" disabled={busy}>Save</button>
+              <button className="button" type="button" disabled={busy} onClick={() => setEditingFamilyName(false)}>Cancel</button>
+            </form>
+          ) : (
+            <button className="text-button" type="button" disabled={busy} onClick={() => setEditingFamilyName(true)} style={{ fontSize: "inherit", fontFamily: "inherit", fontWeight: "inherit", padding: 0, lineHeight: "inherit" }}>{data.familyName}</button>
+          )}
           <p>Viewing as {who}. There is no feed, no public discovery, and no advertising here.</p>
           {data.spaces.length > 1 ? (
             <label className="space-picker">
@@ -294,10 +431,45 @@ export default function FamilyDashboard({
                     <p>
                       {data.access.managedPersonIds.includes(person.id) ? "You can manage this record." : "View only."}
                       {person.birthDate ? ` Born ${person.birthDate}.` : ""}
+                      {(() => { const age = computeAge(person.birthDate ?? null); return age !== null ? ` Age ${age}.` : null; })()}
                     </p>
+                    <button className="text-button" type="button" disabled={busy} onClick={() => setExpandedPersonId(expandedPersonId === person.id ? null : person.id)}>
+                      {expandedPersonId === person.id ? "Hide details" : "Show details"}
+                    </button>
+                    {expandedPersonId === person.id ? (
+                      <div className="person-detail" style={{ marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid var(--border-color, #ddd)" }}>
+                        {data.stories.filter((s) => s.personId === person.id).length + data.media.filter((m) => m.personId === person.id).length === 0 ? (
+                          <p className="empty-state">No stories or media for this person yet.</p>
+                        ) : (
+                          <>
+                            {data.stories.filter((s) => s.personId === person.id).map((story) => (
+                              <article key={story.id} style={{ marginBottom: "0.5rem" }}>
+                                <p className="memory-kind">Story</p>
+                                <p>{story.body}</p>
+                              </article>
+                            ))}
+                            {data.media.filter((m) => m.personId === person.id).map((item) => (
+                              <article key={item.id} style={{ marginBottom: "0.5rem" }}>
+                                <p className="memory-kind">{item.kind === "voice_note" ? "Voice" : "Photo"}</p>
+                                <p>{item.caption || item.fileName || "Private media"}</p>
+                                {item.accessUrl && item.kind === "photo" ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={item.accessUrl} alt={item.caption || ""} style={{ maxWidth: "200px" }} />
+                                ) : null}
+                                {item.accessUrl && item.kind === "voice_note" ? (
+                                  <audio controls src={item.accessUrl}>
+                                    <track kind="captions" srcLang="en" label="Captions" />
+                                  </audio>
+                                ) : null}
+                              </article>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    ) : null}
                     {data.access.managedPersonIds.includes(person.id) && editingPersonId !== person.id ? (
                       <button className="edit-person-button text-button" type="button" disabled={busy} onClick={() => setEditingPersonId(person.id)}>
-                        Rename
+                        Edit
                       </button>
                     ) : null}
                     {editingPersonId === person.id ? (
@@ -306,8 +478,12 @@ export default function FamilyDashboard({
                           Name
                           <input name="displayName" type="text" maxLength={120} defaultValue={person.displayName} required disabled={busy} />
                         </label>
+                        <label>
+                          Date of birth <span className="field-help">Optional. Exact calendar date only.</span>
+                          <input name="birthDate" type="date" defaultValue={person.birthDate ?? ""} disabled={busy} />
+                        </label>
                         <div className="form-actions">
-                          <button className="button button-primary" type="submit" disabled={busy}>Save name</button>
+                          <button className="button button-primary" type="submit" disabled={busy}>Save changes</button>
                           <button className="text-button" type="button" onClick={() => setEditingPersonId(null)}>Cancel</button>
                         </div>
                       </form>
@@ -384,6 +560,34 @@ export default function FamilyDashboard({
                     <span className="relationship-mode">
                       {bond.endedAt ? "Ended" : bond.evidenceMode === "oral" ? "Oral" : "Documented"}
                     </span>
+                    {canUnlink && !bond.endedAt && editingRelationshipId !== bond.id ? (
+                      <button className="edit-person-button text-button" type="button" disabled={busy} onClick={() => setEditingRelationshipId(bond.id)}>
+                        Edit
+                      </button>
+                    ) : null}
+                    {editingRelationshipId === bond.id ? (
+                      <form className="people-edit-form" onSubmit={(event) => onEditRelationship(event, bond.id)}>
+                        <label>
+                          Kind
+                          <select name="relationshipType" defaultValue={bond.relationshipType ?? ""} disabled={busy}>
+                            {Object.entries(RELATIONSHIP_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          How you know
+                          <select name="evidenceMode" defaultValue={bond.evidenceMode ?? ""} disabled={busy}>
+                            <option value="verified">Documented</option>
+                            <option value="oral">Oral family knowledge</option>
+                          </select>
+                        </label>
+                        <div className="form-actions">
+                          <button className="button button-primary" type="submit" disabled={busy}>Save</button>
+                          <button className="text-button" type="button" onClick={() => setEditingRelationshipId(null)}>Cancel</button>
+                        </div>
+                      </form>
+                    ) : null}
                     {canUnlink && pendingUnlinkId !== bond.id ? (
                       <button className="edit-person-button text-button" type="button" disabled={busy} onClick={() => setPendingUnlinkId(bond.id)}>
                         End this bond
@@ -458,27 +662,89 @@ export default function FamilyDashboard({
             <p className="empty-state">No stories or media are visible yet.</p>
           ) : (
             <div className="memory-list">
-              {data.stories.map((story) => (
+              {data.stories.map((story) => {
+                const canManage = data.access.managedPersonIds.includes(story.personId);
+                return (
                 <article key={story.id}>
                   <p className="memory-kind">Story · {personName(data.people, story.personId)}</p>
-                  <p>{story.body}</p>
+                  {editingStoryId === story.id ? (
+                    <form className="people-edit-form" onSubmit={(event) => onEditStory(event, story.id)}>
+                      <label>
+                        Story
+                        <textarea name="body" maxLength={4000} defaultValue={story.body} required disabled={busy} />
+                      </label>
+                      <div className="form-actions">
+                        <button className="button button-primary" type="submit" disabled={busy}>Save</button>
+                        <button className="text-button" type="button" onClick={() => setEditingStoryId(null)}>Cancel</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <p>{story.body}</p>
+                      {canManage && deletingStoryId !== story.id ? (
+                        <div className="form-actions">
+                          <button className="text-button" type="button" disabled={busy} onClick={() => setEditingStoryId(story.id)}>Edit</button>
+                          <button className="text-button" type="button" disabled={busy} onClick={() => setDeletingStoryId(story.id)}>Delete</button>
+                        </div>
+                      ) : null}
+                      {deletingStoryId === story.id ? (
+                        <div className="inline-confirmation">
+                          <p>This removes the story from the record. This cannot be undone.</p>
+                          <button type="button" disabled={busy} onClick={() => onDeleteStory(story.id)}>Delete story</button>
+                          <button type="button" onClick={() => setDeletingStoryId(null)}>Keep it</button>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </article>
-              ))}
-              {data.media.map((item) => (
+                );
+              })}
+              {data.media.map((item) => {
+                const canManage = data.access.managedPersonIds.includes(item.personId);
+                return (
                 <article key={item.id}>
                   <p className="memory-kind">{item.kind === "voice_note" ? "Voice" : "Photo"} · {personName(data.people, item.personId)}</p>
-                  <p>{item.caption || item.fileName || "Private media"}</p>
-                  {item.accessUrl && item.kind === "photo" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.accessUrl} alt={item.caption || ""} />
-                  ) : null}
-                  {item.accessUrl && item.kind === "voice_note" ? (
-                    <audio controls src={item.accessUrl}>
-                      <track kind="captions" srcLang="en" label="Captions" />
-                    </audio>
-                  ) : null}
+                  {editingMediaId === item.id ? (
+                    <form className="people-edit-form" onSubmit={(event) => onEditMediaCaption(event, item.id)}>
+                      <label>
+                        Caption
+                        <input name="caption" type="text" maxLength={300} defaultValue={item.caption ?? ""} disabled={busy} />
+                      </label>
+                      <div className="form-actions">
+                        <button className="button button-primary" type="submit" disabled={busy}>Save</button>
+                        <button className="text-button" type="button" onClick={() => setEditingMediaId(null)}>Cancel</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <p>{item.caption || item.fileName || "Private media"}</p>
+                      {item.accessUrl && item.kind === "photo" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.accessUrl} alt={item.caption || ""} />
+                      ) : null}
+                      {item.accessUrl && item.kind === "voice_note" ? (
+                        <audio controls src={item.accessUrl}>
+                          <track kind="captions" srcLang="en" label="Captions" />
+                        </audio>
+                      ) : null}
+                      {canManage && deletingMediaId !== item.id ? (
+                        <div className="form-actions">
+                          <button className="text-button" type="button" disabled={busy} onClick={() => setEditingMediaId(item.id)}>Edit caption</button>
+                          <button className="text-button" type="button" disabled={busy} onClick={() => setDeletingMediaId(item.id)}>Delete</button>
+                        </div>
+                      ) : null}
+                      {deletingMediaId === item.id ? (
+                        <div className="inline-confirmation">
+                          <p>This removes the media file and caption. This cannot be undone.</p>
+                          <button type="button" disabled={busy} onClick={() => onDeleteMedia(item.id)}>Delete media</button>
+                          <button type="button" onClick={() => setDeletingMediaId(null)}>Keep it</button>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -549,6 +815,34 @@ export default function FamilyDashboard({
               </ul>
             )}
           </div>
+        </div>
+      </section>
+
+      <section id="audit" className="dashboard-section">
+        <div className="section-heading">
+          <p className="step-label">05</p>
+          <h2>Audit trail</h2>
+          <p>Every mutation is recorded. Nothing is silently changed.</p>
+        </div>
+        <div className="dashboard-card">
+          <button className="text-button" type="button" disabled={busy || auditLoading} onClick={fetchAudit}>
+            {auditEvents === null ? "Show recent activity" : "Hide activity"}
+          </button>
+          {auditLoading ? <p className="empty-state">Loading...</p> : null}
+          {auditEvents !== null && !auditLoading ? (
+            auditEvents.length === 0 ? (
+              <p className="empty-state">No recorded activity yet.</p>
+            ) : (
+              <ul className="share-list">
+                {auditEvents.map((event) => (
+                  <li key={event.id}>
+                    <p><strong>{event.action}</strong> on {event.resourceType}</p>
+                    <span className="relationship-mode">{new Date(event.occurredAt).toLocaleString()}</span>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
         </div>
       </section>
     </main>

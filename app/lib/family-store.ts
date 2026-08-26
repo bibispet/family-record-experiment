@@ -210,6 +210,26 @@ export async function getFamilySnapshot(actor: ApiActor, requestedSpaceId?: stri
   };
 }
 
+export async function getAuditLog(actor: ApiActor, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const rows = await context.database.prepare(`
+    SELECT ae.id, ae.action, ae.resource_type, ae.resource_id, ae.occurred_at, ae.dedupe_key, u.email_display
+    FROM audit_events ae
+    LEFT JOIN users u ON u.id = ae.actor_user_id
+    WHERE ae.space_id = ?
+    ORDER BY ae.occurred_at DESC
+    LIMIT 200
+  `).bind(context.space.id).all<{ id: string; action: string; resource_type: string; resource_id: string; occurred_at: number; dedupe_key: string | null; email_display: string | null }>();
+  return rows.results.map((row) => ({
+    id: row.id,
+    action: row.action,
+    resourceType: row.resource_type,
+    resourceId: row.resource_id,
+    occurredAt: iso(row.occurred_at),
+    actorEmail: row.email_display,
+  }));
+}
+
 export async function createPerson(actor: ApiActor, input: { displayName: string; birthDate: string | null }, requestedSpaceId?: string) {
   const context = await getContext(actor, requestedSpaceId);
   const { database, user, space } = context;
@@ -228,15 +248,23 @@ export async function createPerson(actor: ApiActor, input: { displayName: string
   return { id, displayName: input.displayName, birthDate: input.birthDate, birthDateAccuracy: accuracy };
 }
 
-export async function updatePerson(actor: ApiActor, personId: string, displayName: string, requestedSpaceId?: string) {
+export async function updatePerson(actor: ApiActor, personId: string, input: { displayName: string; birthDate?: string | null }, requestedSpaceId?: string) {
   const context = await getManagedPersonContext(actor, personId, requestedSpaceId);
+  const accuracy = input.birthDate === undefined ? undefined : input.birthDate ? "exact" : "unknown";
   const now = Date.now();
+  const updates: string[] = ["display_name = ?", "updated_at = ?"];
+  const binds: (string | number | null)[] = [input.displayName, now];
+  if (accuracy !== undefined) {
+    updates.push("birth_date = ?", "birth_date_accuracy = ?");
+    binds.push(input.birthDate ?? null, accuracy);
+  }
+  binds.push(personId, context.space.id);
   await context.database.batch([
-    context.database.prepare("UPDATE people SET display_name = ?, updated_at = ? WHERE id = ? AND space_id = ?")
-      .bind(displayName, now, personId, context.space.id),
+    context.database.prepare(`UPDATE people SET ${updates.join(", ")} WHERE id = ? AND space_id = ?`)
+      .bind(...binds),
     audit(context.database, context.space.id, context.user.id, "person.updated", "person", personId, now),
   ]);
-  return { id: personId, displayName };
+  return { id: personId, displayName: input.displayName, birthDate: input.birthDate ?? null, birthDateAccuracy: accuracy ?? "unknown" };
 }
 
 export async function createRelationship(actor: ApiActor, input: {
@@ -291,6 +319,35 @@ export async function unlinkRelationship(actor: ApiActor, relationshipId: string
   };
 }
 
+export async function updateRelationship(actor: ApiActor, relationshipId: string, input: { relationshipType?: RelationshipType; evidenceMode?: RelationshipEvidenceMode }, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const relationship = await context.database.prepare(`
+    SELECT id, source_person_id, target_person_id, relationship_type, evidence_mode, created_at, ended_at
+    FROM relationships WHERE id = ? AND space_id = ?
+  `).bind(relationshipId, context.space.id).first<Record<string, string | number | null>>();
+  if (!relationship) throw new HttpError(404, "Relationship not found.", "not_found");
+  const managed = await managedPeople(context, [String(relationship.source_person_id), String(relationship.target_person_id)]);
+  if (managed.length !== 2) throw new HttpError(404, "Relationship not found.", "not_found");
+  if (relationship.ended_at !== null) throw new HttpError(409, "An ended relationship cannot be edited.", "already_exists");
+  const newType = input.relationshipType ?? String(relationship.relationship_type);
+  const newMode = input.evidenceMode ?? String(relationship.evidence_mode);
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("UPDATE relationships SET relationship_type = ?, evidence_mode = ?, created_at = ? WHERE id = ? AND space_id = ?")
+      .bind(newType, newMode, Math.max(now, Number(relationship.created_at) + 1), relationshipId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "relationship.updated", "relationship", relationshipId, now),
+  ]);
+  return {
+    id: relationshipId,
+    sourcePersonId: String(relationship.source_person_id),
+    targetPersonId: String(relationship.target_person_id),
+    relationshipType: newType,
+    evidenceMode: newMode,
+    createdAt: iso(Math.max(now, Number(relationship.created_at) + 1)),
+    endedAt: null,
+  };
+}
+
 export async function createStory(actor: ApiActor, personId: string, body: string, requestedSpaceId?: string) {
   const context = await getContext(actor, requestedSpaceId);
   if ((await managedPeople(context, [personId])).length !== 1) throw new HttpError(404, "Person not found.", "not_found");
@@ -302,6 +359,69 @@ export async function createStory(actor: ApiActor, personId: string, body: strin
     audit(context.database, context.space.id, context.user.id, "story.created", "story", id, now),
   ]);
   return { id, personId, body, createdAt: iso(now) };
+}
+
+export async function updateStory(actor: ApiActor, storyId: string, body: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const row = await context.database.prepare(`
+    SELECT s.id, s.person_id FROM stories s WHERE s.id = ? AND s.space_id = ?
+  `).bind(storyId, context.space.id).first<{ id: string; person_id: string }>();
+  if (!row) throw new HttpError(404, "Story not found.", "not_found");
+  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Story not found.", "not_found");
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("UPDATE stories SET body = ?, updated_at = ? WHERE id = ? AND space_id = ?")
+      .bind(body, now, storyId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "story.updated", "story", storyId, now),
+  ]);
+  return { id: storyId, personId: row.person_id, body, createdAt: iso(now) };
+}
+
+export async function deleteStory(actor: ApiActor, storyId: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const row = await context.database.prepare(`
+    SELECT s.id, s.person_id FROM stories s WHERE s.id = ? AND s.space_id = ?
+  `).bind(storyId, context.space.id).first<{ id: string; person_id: string }>();
+  if (!row) throw new HttpError(404, "Story not found.", "not_found");
+  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Story not found.", "not_found");
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("DELETE FROM stories WHERE id = ? AND space_id = ?").bind(storyId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "story.deleted", "story", storyId, now),
+  ]);
+  return { id: storyId };
+}
+
+export async function updateMediaCaption(actor: ApiActor, mediaId: string, caption: string | null, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const row = await context.database.prepare(`
+    SELECT m.id, m.person_id FROM media_assets m WHERE m.id = ? AND m.space_id = ? AND m.status = 'ready'
+  `).bind(mediaId, context.space.id).first<{ id: string; person_id: string }>();
+  if (!row) throw new HttpError(404, "Media not found.", "not_found");
+  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Media not found.", "not_found");
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("UPDATE media_assets SET caption = ?, updated_at = ? WHERE id = ? AND space_id = ?")
+      .bind(caption, now, mediaId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "media.caption_updated", "media_asset", mediaId, now),
+  ]);
+  return { id: mediaId, personId: row.person_id, caption };
+}
+
+export async function deleteMedia(actor: ApiActor, mediaId: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const row = await context.database.prepare(`
+    SELECT m.id, m.person_id, m.r2_key FROM media_assets m WHERE m.id = ? AND m.space_id = ? AND m.status = 'ready'
+  `).bind(mediaId, context.space.id).first<{ id: string; person_id: string; r2_key: string }>();
+  if (!row) throw new HttpError(404, "Media not found.", "not_found");
+  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Media not found.", "not_found");
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("DELETE FROM media_assets WHERE id = ? AND space_id = ?").bind(mediaId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "media.deleted", "media_asset", mediaId, now),
+  ]);
+  await context.media.delete(row.r2_key).catch(() => {});
+  return { id: mediaId };
 }
 
 export async function getManagedPersonContext(actor: ApiActor, personId: string, requestedSpaceId?: string) {
@@ -508,6 +628,22 @@ async function managedPeople(context: StoreContext, personIds: string[]): Promis
 function audit(database: D1Database, spaceId: string, userId: string, action: string, resourceType: string, resourceId: string, now: number, dedupeKey: string | null = null) {
   return database.prepare("INSERT OR IGNORE INTO audit_events (id, space_id, actor_user_id, action, resource_type, resource_id, occurred_at, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .bind(crypto.randomUUID(), spaceId, userId, action, resourceType, resourceId, now, dedupeKey);
+}
+
+export async function updateFamilyName(actor: ApiActor, name: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  if (!name || name.trim().length === 0) throw new HttpError(400, "Family name cannot be blank.", "validation_error");
+  const trimmed = name.trim().slice(0, 200);
+  const now = Date.now();
+  const steward = await context.database.prepare(
+    "SELECT 1 AS found FROM space_memberships WHERE space_id = ? AND user_id = ? AND role = 'steward' AND status = 'active'"
+  ).bind(context.space.id, context.user.id).first<{ found: number }>();
+  if (!steward) throw new HttpError(403, "Only a space steward can rename the family.", "forbidden");
+  await context.database.batch([
+    context.database.prepare("UPDATE family_spaces SET name = ? WHERE id = ?").bind(trimmed, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "family.renamed", "space", context.space.id, now),
+  ]);
+  return { id: context.space.id, name: trimmed };
 }
 
 function iso(timestamp: number) {

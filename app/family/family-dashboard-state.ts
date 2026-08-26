@@ -88,6 +88,67 @@ export function withRenamedPerson(
   };
 }
 
+export function withUpdatedPerson(
+  current: FamilyDashboardData,
+  personId: string,
+  displayName: string,
+  birthDate: string | null,
+  birthDateAccuracy: "unknown" | "exact" | "approximate",
+): FamilyDashboardData {
+  return {
+    ...current,
+    people: current.people.map((person) =>
+      person.id === personId ? { ...person, displayName, birthDate, birthDateAccuracy } : person,
+    ),
+  };
+}
+
+export function withUpdatedStory(
+  current: FamilyDashboardData,
+  storyId: string,
+  body: string,
+): FamilyDashboardData {
+  return {
+    ...current,
+    stories: current.stories.map((story) =>
+      story.id === storyId ? { ...story, body } : story,
+    ),
+  };
+}
+
+export function withDeletedStory(
+  current: FamilyDashboardData,
+  storyId: string,
+): FamilyDashboardData {
+  return {
+    ...current,
+    stories: current.stories.filter((story) => story.id !== storyId),
+  };
+}
+
+export function withUpdatedMedia(
+  current: FamilyDashboardData,
+  mediaId: string,
+  caption: string | null,
+): FamilyDashboardData {
+  return {
+    ...current,
+    media: current.media.map((item) =>
+      item.id === mediaId ? { ...item, caption } : item,
+    ),
+  };
+}
+
+export function withDeletedMedia(
+  current: FamilyDashboardData,
+  mediaId: string,
+): FamilyDashboardData {
+  return {
+    ...current,
+    media: current.media.filter((item) => item.id !== mediaId),
+  };
+}
+
 export function withUnlinkedRelationship(
   current: FamilyDashboardData,
   relationshipId: string,
@@ -97,6 +158,20 @@ export function withUnlinkedRelationship(
     ...current,
     relationships: current.relationships.map((bond) =>
       bond.id === relationshipId ? { ...bond, endedAt } : bond,
+    ),
+  };
+}
+
+export function withUpdatedRelationship(
+  current: FamilyDashboardData,
+  relationshipId: string,
+  relationshipType: string,
+  evidenceMode: string,
+): FamilyDashboardData {
+  return {
+    ...current,
+    relationships: current.relationships.map((bond) =>
+      bond.id === relationshipId ? { ...bond, relationshipType, evidenceMode } : bond,
     ),
   };
 }
@@ -113,3 +188,11 @@ export function withRevokedShare(
     ),
   };
 }
+
+export function withUpdatedFamilyName(
+  current: FamilyDashboardData,
+  familyName: string,
+): FamilyDashboardData {
+  return { ...current, familyName };
+}
+

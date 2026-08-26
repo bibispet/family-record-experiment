@@ -54,6 +54,12 @@ const protectedRequests = [
   ["/api/shares", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
   ["/api/shares/00000000-0000-4000-8000-000000000001/revoke", { method: "POST" }],
   ["/api/media/00000000-0000-4000-8000-000000000001", { method: "GET" }],
+  ["/api/stories/00000000-0000-4000-8000-000000000001", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/stories/00000000-0000-4000-8000-000000000001", { method: "DELETE" }],
+  ["/api/media/00000000-0000-4000-8000-000000000001", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/media/00000000-0000-4000-8000-000000000001", { method: "DELETE" }],
+  ["/api/audit", { method: "GET" }],
+  ["/api/relationships/00000000-0000-4000-8000-000000000001", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" }],
 ];
 
 for (const [path, init] of protectedRequests) {
@@ -66,3 +72,16 @@ for (const [path, init] of protectedRequests) {
     assert.deepEqual(Object.keys(body).sort(), ["code", "error"]);
   });
 }
+test("anonymous request is denied without leaking data: PATCH /api/family", async () => {
+  const response = await request("/api/family", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "test" }),
+  });
+  assert.equal(response.status, 401);
+  assert.match(response.headers.get("cache-control") ?? "", /private, no-store/);
+  const body = await response.json();
+  assert.equal(body.code, "authentication_required");
+  assert.deepEqual(Object.keys(body).sort(), ["code", "error"]);
+});
+
