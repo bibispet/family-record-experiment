@@ -1,8 +1,9 @@
-import { cleanId, getApiActor, routeError } from "../../../lib/api";
+import { assertSafeMutation, cleanId, cleanText, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../../lib/api";
+import { getApiActorFromRequest } from "../../../lib/identity";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const actor = getApiActor(request);
+    const actor = getApiActorFromRequest(request);
     const { getReadableMedia } = await import("../../../lib/family-store");
     const { id } = await context.params;
     const spaceId = new URL(request.url).searchParams.get("space") ?? undefined;
@@ -19,6 +20,35 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         "X-Content-Type-Options": "nosniff",
       },
     });
+  } catch (error) {
+    return routeError(error);
+  }
+}
+
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const actor = getApiActorFromRequest(request);
+    const { updateMediaCaption } = await import("../../../lib/family-store");
+    assertSafeMutation(request, "json");
+    const { id } = await context.params;
+    const body = await readJsonObject(request);
+    const caption = body.caption === undefined ? undefined : body.caption === null ? null : cleanText(body.caption, "Caption", { max: 300 }) || null;
+    const media = await updateMediaCaption(actor, cleanId(id), caption ?? null, requestedSpaceId(request));
+    return noStoreJson({ media });
+  } catch (error) {
+    return routeError(error);
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const actor = getApiActorFromRequest(request);
+    const { deleteMedia } = await import("../../../lib/family-store");
+    assertSafeMutation(request);
+    const { id } = await context.params;
+    const result = await deleteMedia(actor, cleanId(id), requestedSpaceId(request));
+    return noStoreJson(result);
   } catch (error) {
     return routeError(error);
   }

@@ -1,14 +1,16 @@
-import { assertSafeMutation, cleanId, cleanText, getApiActor, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../../lib/api";
+import { assertSafeMutation, cleanDate, cleanId, cleanText, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../../lib/api";
+import { getApiActorFromRequest } from "../../../lib/identity";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const actor = getApiActor(request);
+    const actor = getApiActorFromRequest(request);
     const { updatePerson } = await import("../../../lib/family-store");
     assertSafeMutation(request, "json");
     const { id } = await context.params;
     const body = await readJsonObject(request);
     const displayName = cleanText(body.displayName, "Name", { max: 120 });
-    const person = await updatePerson(actor, cleanId(id), displayName!, requestedSpaceId(request));
+    const birthDate = body.birthDate === undefined ? undefined : cleanDate(body.birthDate);
+    const person = await updatePerson(actor, cleanId(id), { displayName: displayName!, birthDate }, requestedSpaceId(request));
     return noStoreJson({ person });
   } catch (error) {
     return routeError(error);

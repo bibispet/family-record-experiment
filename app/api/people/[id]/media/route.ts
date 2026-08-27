@@ -1,9 +1,10 @@
-import { assertSafeMutation, cleanId, cleanText, getApiActor, HttpError, noStoreJson, requestedSpaceId, routeError } from "../../../../lib/api";
+import { assertSafeMutation, cleanId, cleanText, HttpError, noStoreJson, requestedSpaceId, routeError } from "../../../../lib/api";
+import { getApiActorFromRequest } from "../../../../lib/identity";
 import { validateMedia } from "../../../../lib/media-validation";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const actor = getApiActor(request);
+    const actor = getApiActorFromRequest(request);
     const { beginMedia, completeMedia, getManagedPersonContext } = await import("../../../../lib/family-store");
     assertSafeMutation(request, "multipart");
     const { id } = await context.params;

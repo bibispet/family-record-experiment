@@ -25,12 +25,22 @@ test("renders the finished product welcome page", async () => {
 });
 
 test("redirects anonymous family pages to dispatch-owned sign in", async () => {
-  const response = await request("/family", {
-    headers: { accept: "text/html" },
-    redirect: "manual",
-  });
-  assert.ok([302, 303, 307, 308].includes(response.status));
-  assert.match(response.headers.get("location") ?? "", /^\/signin-with-chatgpt\?return_to=/);
+  // The vendor sign-in destination belongs to the header adapter. The default
+  // deny provider offers no sign-in URL at all, so this redirect behavior is
+  // asserted with the header adapter explicitly selected.
+  const previous = process.env.IDENTITY_PROVIDER;
+  process.env.IDENTITY_PROVIDER = "header";
+  try {
+    const response = await request("/family", {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    assert.ok([302, 303, 307, 308].includes(response.status));
+    assert.match(response.headers.get("location") ?? "", /^\/signin-with-chatgpt\?return_to=/);
+  } finally {
+    if (previous === undefined) delete process.env.IDENTITY_PROVIDER;
+    else process.env.IDENTITY_PROVIDER = previous;
+  }
 });
 
 const protectedRequests = [
@@ -44,6 +54,12 @@ const protectedRequests = [
   ["/api/shares", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }],
   ["/api/shares/00000000-0000-4000-8000-000000000001/revoke", { method: "POST" }],
   ["/api/media/00000000-0000-4000-8000-000000000001", { method: "GET" }],
+  ["/api/stories/00000000-0000-4000-8000-000000000001", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/stories/00000000-0000-4000-8000-000000000001", { method: "DELETE" }],
+  ["/api/media/00000000-0000-4000-8000-000000000001", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" }],
+  ["/api/media/00000000-0000-4000-8000-000000000001", { method: "DELETE" }],
+  ["/api/audit", { method: "GET" }],
+  ["/api/relationships/00000000-0000-4000-8000-000000000001", { method: "PATCH", headers: { "content-type": "application/json" }, body: "{}" }],
 ];
 
 for (const [path, init] of protectedRequests) {
@@ -56,3 +72,16 @@ for (const [path, init] of protectedRequests) {
     assert.deepEqual(Object.keys(body).sort(), ["code", "error"]);
   });
 }
+test("anonymous request is denied without leaking data: PATCH /api/family", async () => {
+  const response = await request("/api/family", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "test" }),
+  });
+  assert.equal(response.status, 401);
+  assert.match(response.headers.get("cache-control") ?? "", /private, no-store/);
+  const body = await response.json();
+  assert.equal(body.code, "authentication_required");
+  assert.deepEqual(Object.keys(body).sort(), ["code", "error"]);
+});
+
