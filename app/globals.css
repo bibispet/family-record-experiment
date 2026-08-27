@@ -161,3 +161,22 @@ button, input, textarea, select { font: inherit; }
   .memory-list { grid-template-columns: 1fr; }
   .dashboard-card .button { width: 100%; }
 }
+/* Family graph view */
+.family-graph-container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+.family-graph-header { margin-bottom: 24px; }
+.family-graph-canvas { position: relative; width: 100%; aspect-ratio: 16/10; border: 1px solid var(--line); border-radius: 13px; background: var(--paper); overflow: hidden; touch-action: none; }
+.family-graph-svg { width: 100%; height: 100%; display: block; }
+.family-graph-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; font-size: 13px; color: var(--muted); }
+.family-graph-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.family-graph-detail { margin-top: 20px; padding: 18px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper); }
+.family-graph-detail-header { display: flex; justify-content: space-between; align-items: baseline; }
+.family-graph-detail-header h2 { margin: 0; font-size: 22px; }
+.family-graph-detail ul { margin: 10px 0 0; padding-left: 18px; }
+.family-graph-detail li { margin: 4px 0; font-size: 14px; line-height: 1.5; }
+.family-graph-edge-type { color: var(--rose); text-transform: capitalize; font-weight: 700; font-size: 12px; letter-spacing: .04em; }
+@media (max-width: 520px) {
+  .family-graph-container { padding: 20px 14px; }
+  .family-graph-canvas { aspect-ratio: 4/3; }
+  .family-graph-legend { gap: 10px; font-size: 12px; }
+}
+

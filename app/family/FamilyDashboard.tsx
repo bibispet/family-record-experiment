@@ -388,6 +388,7 @@ export default function FamilyDashboard({
         <a href="#bonds">Bonds</a>
         <a href="#memories">Stories &amp; media</a>
         <a href="#shares">Shares</a>
+        <Link href="/family/graph">Graph</Link>
         <Link href="/">Home</Link>
       </nav>
 
