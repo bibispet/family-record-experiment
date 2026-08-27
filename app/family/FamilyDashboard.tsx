@@ -97,11 +97,11 @@ export default function FamilyDashboard({
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [pendingUnlinkId, setPendingUnlinkId] = useState<string | null>(null);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
-  const [personSearch, setPersonSearch] = useState("");
   const [editingStoryId, setEditingStoryId] = useState<string | null>(null);
   const [deletingStoryId, setDeletingStoryId] = useState<string | null>(null);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
+  const [personSearch, setPersonSearch] = useState("");
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
   const [editingRelationshipId, setEditingRelationshipId] = useState<string | null>(null);
   const [editingFamilyName, setEditingFamilyName] = useState(false);

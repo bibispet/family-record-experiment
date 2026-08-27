@@ -361,69 +361,6 @@ export async function createStory(actor: ApiActor, personId: string, body: strin
   return { id, personId, body, createdAt: iso(now) };
 }
 
-export async function updateStory(actor: ApiActor, storyId: string, body: string, requestedSpaceId?: string) {
-  const context = await getContext(actor, requestedSpaceId);
-  const row = await context.database.prepare(`
-    SELECT s.id, s.person_id FROM stories s WHERE s.id = ? AND s.space_id = ?
-  `).bind(storyId, context.space.id).first<{ id: string; person_id: string }>();
-  if (!row) throw new HttpError(404, "Story not found.", "not_found");
-  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Story not found.", "not_found");
-  const now = Date.now();
-  await context.database.batch([
-    context.database.prepare("UPDATE stories SET body = ?, updated_at = ? WHERE id = ? AND space_id = ?")
-      .bind(body, now, storyId, context.space.id),
-    audit(context.database, context.space.id, context.user.id, "story.updated", "story", storyId, now),
-  ]);
-  return { id: storyId, personId: row.person_id, body, createdAt: iso(now) };
-}
-
-export async function deleteStory(actor: ApiActor, storyId: string, requestedSpaceId?: string) {
-  const context = await getContext(actor, requestedSpaceId);
-  const row = await context.database.prepare(`
-    SELECT s.id, s.person_id FROM stories s WHERE s.id = ? AND s.space_id = ?
-  `).bind(storyId, context.space.id).first<{ id: string; person_id: string }>();
-  if (!row) throw new HttpError(404, "Story not found.", "not_found");
-  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Story not found.", "not_found");
-  const now = Date.now();
-  await context.database.batch([
-    context.database.prepare("DELETE FROM stories WHERE id = ? AND space_id = ?").bind(storyId, context.space.id),
-    audit(context.database, context.space.id, context.user.id, "story.deleted", "story", storyId, now),
-  ]);
-  return { id: storyId };
-}
-
-export async function updateMediaCaption(actor: ApiActor, mediaId: string, caption: string | null, requestedSpaceId?: string) {
-  const context = await getContext(actor, requestedSpaceId);
-  const row = await context.database.prepare(`
-    SELECT m.id, m.person_id FROM media_assets m WHERE m.id = ? AND m.space_id = ? AND m.status = 'ready'
-  `).bind(mediaId, context.space.id).first<{ id: string; person_id: string }>();
-  if (!row) throw new HttpError(404, "Media not found.", "not_found");
-  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Media not found.", "not_found");
-  const now = Date.now();
-  await context.database.batch([
-    context.database.prepare("UPDATE media_assets SET caption = ? WHERE id = ? AND space_id = ?")
-      .bind(caption, mediaId, context.space.id),
-    audit(context.database, context.space.id, context.user.id, "media.caption_updated", "media_asset", mediaId, now),
-  ]);
-  return { id: mediaId, personId: row.person_id, caption };
-}
-
-export async function deleteMedia(actor: ApiActor, mediaId: string, requestedSpaceId?: string) {
-  const context = await getContext(actor, requestedSpaceId);
-  const row = await context.database.prepare(`
-    SELECT m.id, m.person_id, m.r2_key FROM media_assets m WHERE m.id = ? AND m.space_id = ? AND m.status = 'ready'
-  `).bind(mediaId, context.space.id).first<{ id: string; person_id: string; r2_key: string }>();
-  if (!row) throw new HttpError(404, "Media not found.", "not_found");
-  if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Media not found.", "not_found");
-  const now = Date.now();
-  await context.database.batch([
-    context.database.prepare("DELETE FROM media_assets WHERE id = ? AND space_id = ?").bind(mediaId, context.space.id),
-    audit(context.database, context.space.id, context.user.id, "media.deleted", "media_asset", mediaId, now),
-  ]);
-  await context.media.delete(row.r2_key).catch(() => {});
-  return { id: mediaId };
-}
-
 export async function getManagedPersonContext(actor: ApiActor, personId: string, requestedSpaceId?: string) {
   const context = await getContext(actor, requestedSpaceId);
   if ((await managedPeople(context, [personId])).length !== 1) {
@@ -511,6 +448,73 @@ export async function getReadableMedia(actor: ApiActor, mediaId: string, request
   `).bind(context.space.id, context.user.id, now, mediaId).first<{ id: string; r2_key: string; canonical_mime: string; kind: string; caption: string }>();
   if (!row) throw new HttpError(404, "Media not found.", "not_found");
   return { context, row };
+}
+
+export async function updateStory(actor: ApiActor, storyId: string, body: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const row = await context.database.prepare(
+    "SELECT id, space_id, person_id, body, created_at FROM stories WHERE id = ? AND space_id = ?"
+  ).bind(storyId, context.space.id).first<{ id: string; space_id: string; person_id: string; body: string; created_at: number }>();
+  if (!row) throw new HttpError(404, "Story not found.", "not_found");
+  const managed = await managedPeople(context, [row.person_id]);
+  if (managed.length !== 1) throw new HttpError(404, "Story not found.", "not_found");
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("UPDATE stories SET body = ?, updated_at = ? WHERE id = ? AND space_id = ?")
+      .bind(body, now, storyId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "story.updated", "story", storyId, now, `story.updated:${storyId}`),
+  ]);
+  return { id: storyId, personId: row.person_id, body, createdAt: iso(row.created_at) };
+}
+
+export async function deleteStory(actor: ApiActor, storyId: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const row = await context.database.prepare(
+    "SELECT id, space_id, person_id FROM stories WHERE id = ? AND space_id = ?"
+  ).bind(storyId, context.space.id).first<{ id: string; space_id: string; person_id: string }>();
+  if (!row) throw new HttpError(404, "Story not found.", "not_found");
+  const managed = await managedPeople(context, [row.person_id]);
+  if (managed.length !== 1) throw new HttpError(404, "Story not found.", "not_found");
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("DELETE FROM stories WHERE id = ? AND space_id = ?").bind(storyId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "story.deleted", "story", storyId, now, `story.deleted:${storyId}`),
+  ]);
+  return { id: storyId, personId: row.person_id };
+}
+
+export async function updateMediaCaption(actor: ApiActor, mediaId: string, caption: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const now = Date.now();
+  const row = await context.database.prepare(
+    "SELECT id, space_id, person_id, caption, created_at FROM media_assets WHERE id = ? AND space_id = ? AND status = 'ready'"
+  ).bind(mediaId, context.space.id).first<{ id: string; space_id: string; person_id: string; caption: string; created_at: number }>();
+  if (!row) throw new HttpError(404, "Media not found.", "not_found");
+  const managed = await managedPeople(context, [row.person_id]);
+  if (managed.length !== 1) throw new HttpError(404, "Media not found.", "not_found");
+  await context.database.batch([
+    context.database.prepare("UPDATE media_assets SET caption = ?, updated_at = ? WHERE id = ? AND space_id = ?")
+      .bind(caption, now, mediaId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "media.caption_updated", "media", mediaId, now, `media.caption_updated:${mediaId}`),
+  ]);
+  return { id: mediaId, personId: row.person_id, caption, createdAt: iso(row.created_at) };
+}
+
+export async function deleteMedia(actor: ApiActor, mediaId: string, requestedSpaceId?: string) {
+  const context = await getContext(actor, requestedSpaceId);
+  const row = await context.database.prepare(
+    "SELECT id, space_id, person_id, r2_key FROM media_assets WHERE id = ? AND space_id = ?"
+  ).bind(mediaId, context.space.id).first<{ id: string; space_id: string; person_id: string; r2_key: string }>();
+  if (!row) throw new HttpError(404, "Media not found.", "not_found");
+  const managed = await managedPeople(context, [row.person_id]);
+  if (managed.length !== 1) throw new HttpError(404, "Media not found.", "not_found");
+  await context.media.delete(row.r2_key).catch(() => undefined);
+  const now = Date.now();
+  await context.database.batch([
+    context.database.prepare("DELETE FROM media_assets WHERE id = ? AND space_id = ?").bind(mediaId, context.space.id),
+    audit(context.database, context.space.id, context.user.id, "media.deleted", "media", mediaId, now, `media.deleted:${mediaId}`),
+  ]);
+  return { id: mediaId, personId: row.person_id };
 }
 
 export async function createShare(actor: ApiActor, input: { recipientEmail: string; personIds: string[] }, requestedSpaceId?: string) {

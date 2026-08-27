@@ -25,7 +25,6 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   }
 }
 
-
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const actor = getApiActorFromRequest(request);
@@ -33,8 +32,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     assertSafeMutation(request, "json");
     const { id } = await context.params;
     const body = await readJsonObject(request);
-    const caption = body.caption === undefined ? undefined : body.caption === null ? null : cleanText(body.caption, "Caption", { max: 300 }) || null;
-    const media = await updateMediaCaption(actor, cleanId(id), caption ?? null, requestedSpaceId(request));
+    const caption = cleanText(body.caption, "Caption", { max: 300, optional: true }) ?? "";
+    const spaceId = requestedSpaceId(request);
+    const media = await updateMediaCaption(actor, cleanId(id), caption, spaceId ? cleanId(spaceId, "Family space") : undefined);
     return noStoreJson({ media });
   } catch (error) {
     return routeError(error);
@@ -47,8 +47,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     const { deleteMedia } = await import("../../../lib/family-store");
     assertSafeMutation(request);
     const { id } = await context.params;
-    const result = await deleteMedia(actor, cleanId(id), requestedSpaceId(request));
-    return noStoreJson(result);
+    const spaceId = requestedSpaceId(request);
+    const result = await deleteMedia(actor, cleanId(id), spaceId ? cleanId(spaceId, "Family space") : undefined);
+    return noStoreJson({ deleted: result });
   } catch (error) {
     return routeError(error);
   }
