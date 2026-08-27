@@ -13,6 +13,7 @@ import {
   withUpdatedRelationship,
   withRevokedShare,
   withUnlinkedRelationship,
+  filterPeople,
   type FamilyDashboardData,
   type FamilyMedia,
   type FamilyPerson,
@@ -96,6 +97,7 @@ export default function FamilyDashboard({
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [pendingUnlinkId, setPendingUnlinkId] = useState<string | null>(null);
   const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
+  const [personSearch, setPersonSearch] = useState("");
   const [editingStoryId, setEditingStoryId] = useState<string | null>(null);
   const [deletingStoryId, setDeletingStoryId] = useState<string | null>(null);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
@@ -425,8 +427,24 @@ export default function FamilyDashboard({
             {data.people.length === 0 ? (
               <p className="empty-state">No people are visible to you yet.</p>
             ) : (
-              <ul className="people-list">
-                {data.people.map((person) => (
+              <>
+                <label className="person-search-label">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Filter by name…"
+                    value={personSearch}
+                    onChange={(event) => setPersonSearch(event.target.value)}
+                  />
+                </label>
+                {(() => {
+                  const filtered = filterPeople(data.people, personSearch);
+                  if (filtered.length === 0) {
+                    return <p className="empty-state">No people match your search.</p>;
+                  }
+                  return (
+                    <ul className="people-list">
+                      {filtered.map((person) => (
                   <li key={person.id}>
                     <h4>{person.displayName}</h4>
                     <p>
@@ -491,7 +509,10 @@ export default function FamilyDashboard({
                     ) : null}
                   </li>
                 ))}
-              </ul>
+                    </ul>
+                  );
+                })()}
+              </>
             )}
           </div>
         </div>

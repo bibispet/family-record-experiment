@@ -196,3 +196,13 @@ export function withUpdatedFamilyName(
   return { ...current, familyName };
 }
 
+export function filterPeople(
+  people: FamilyPerson[],
+  query: string,
+): FamilyPerson[] {
+  if (!query.trim()) return people;
+  const lower = query.toLowerCase();
+  return people.filter((person) =>
+    person.displayName.toLowerCase().includes(lower),
+  );
+}
