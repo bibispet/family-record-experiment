@@ -457,17 +457,40 @@ export default function FamilyDashboard({
                     </button>
                     {expandedPersonId === person.id ? (
                       <div className="person-detail" style={{ marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid var(--border-color, #ddd)" }}>
-                        {data.stories.filter((s) => s.personId === person.id).length + data.media.filter((m) => m.personId === person.id).length === 0 ? (
-                          <p className="empty-state">No stories or media for this person yet.</p>
-                        ) : (
+                        {(() => {
+                          const personRelationships = data.relationships.filter(
+                            (r) => (r.sourcePersonId === person.id || r.targetPersonId === person.id) && !r.endedAt,
+                          );
+                          const personStories = data.stories.filter((s) => s.personId === person.id);
+                          const personMedia = data.media.filter((m) => m.personId === person.id);
+                          const hasAnything = personRelationships.length + personStories.length + personMedia.length > 0;
+                          if (!hasAnything) {
+                            return <p className="empty-state">No stories, media, or active bonds for this person yet.</p>;
+                          }
+                          return (
                           <>
-                            {data.stories.filter((s) => s.personId === person.id).map((story) => (
+                            {personRelationships.length > 0 ? (
+                              <div style={{ marginBottom: "0.75rem" }}>
+                                <p className="memory-kind">Active bonds</p>
+                                <ul style={{ margin: "0.25rem 0 0 1.25rem" }}>
+                                  {personRelationships.map((bond) => (
+                                    <li key={bond.id}>
+                                      {RELATIONSHIP_LABELS[bond.relationshipType ?? ""] ?? bond.relationshipType}
+                                      {" · "}
+                                      {personName(data.people, bond.sourcePersonId === person.id ? bond.targetPersonId : bond.sourcePersonId)}
+                                      {bond.evidenceMode === "oral" ? " (oral)" : ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {personStories.map((story) => (
                               <article key={story.id} style={{ marginBottom: "0.5rem" }}>
                                 <p className="memory-kind">Story</p>
                                 <p>{story.body}</p>
                               </article>
                             ))}
-                            {data.media.filter((m) => m.personId === person.id).map((item) => (
+                            {personMedia.map((item) => (
                               <article key={item.id} style={{ marginBottom: "0.5rem" }}>
                                 <p className="memory-kind">{item.kind === "voice_note" ? "Voice" : "Photo"}</p>
                                 <p>{item.caption || item.fileName || "Private media"}</p>
@@ -483,7 +506,8 @@ export default function FamilyDashboard({
                               </article>
                             ))}
                           </>
-                        )}
+                          );
+                        })()}
                       </div>
                     ) : null}
                     {data.access.managedPersonIds.includes(person.id) && editingPersonId !== person.id ? (
