@@ -401,8 +401,8 @@ export async function updateMediaCaption(actor: ApiActor, mediaId: string, capti
   if ((await managedPeople(context, [row.person_id])).length !== 1) throw new HttpError(404, "Media not found.", "not_found");
   const now = Date.now();
   await context.database.batch([
-    context.database.prepare("UPDATE media_assets SET caption = ?, updated_at = ? WHERE id = ? AND space_id = ?")
-      .bind(caption, now, mediaId, context.space.id),
+    context.database.prepare("UPDATE media_assets SET caption = ? WHERE id = ? AND space_id = ?")
+      .bind(caption, mediaId, context.space.id),
     audit(context.database, context.space.id, context.user.id, "media.caption_updated", "media_asset", mediaId, now),
   ]);
   return { id: mediaId, personId: row.person_id, caption };

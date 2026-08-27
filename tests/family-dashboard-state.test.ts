@@ -9,6 +9,7 @@ import {
   withUpdatedMedia,
   withDeletedMedia,
   withUpdatedFamilyName,
+  withUpdatedRelationship,
   withRevokedShare,
   withUnlinkedRelationship,
   type FamilyDashboardData,
@@ -166,5 +167,24 @@ test("withUpdatedFamilyName replaces the family name on the dashboard data", () 
   const result = withUpdatedFamilyName(original, "Johnson family");
   assert.equal(result.familyName, "Johnson family");
   assert.equal(original.familyName, "Smith family");
+});
+test("withUpdatedRelationship updates type and evidence mode of the matching bond", () => {
+  const original = {
+    familyId: "f1",
+    familyName: "Test",
+    spaces: [],
+    access: { canCreatePeople: false, managedPersonIds: [] },
+    people: [],
+    relationships: [
+      { id: "r1", sourcePersonId: "p1", targetPersonId: "p2", relationshipType: "parent_of", evidenceMode: "oral", createdAt: null, endedAt: null },
+    ],
+    stories: [],
+    media: [],
+    shares: [],
+  };
+  const result = withUpdatedRelationship(original, "r1", "spouse_of", "verified");
+  assert.equal(result.relationships[0]?.relationshipType, "spouse_of");
+  assert.equal(result.relationships[0]?.evidenceMode, "verified");
+  assert.equal(result.relationships.length, 1);
 });
 

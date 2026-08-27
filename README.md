@@ -155,7 +155,7 @@ npm test
 custodianship, API, and upload suites, then directly exercises every protected
 route without a session to verify denial.
 
-The current suite contains 36 unit tests and 12 rendered/access-control tests.
+The current suite contains 71 unit tests and 19 rendered/access-control tests.
 They are evidence only for the properties they exercise. Nobody independent
 selected which properties to test, so the suite cannot establish that omitted
 properties are safe.
