@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   EXAMPLE_SEED_PLAN,
+  deterministicUuid,
   seedFamily,
+  seedIdentity,
   validateSeedPlan,
   type SeedPlan,
 } from "../db/seed";
@@ -148,4 +150,15 @@ test("validateSeedPlan rejects a plan whose media references a stranger", async 
   const mutated: SeedPlan = structuredClone(EXAMPLE_SEED_PLAN);
   mutated.media = [{ person: "Invisible Stranger", kind: "photo", caption: "h", byteSize: 1 }];
   assert.throws(() => validateSeedPlan(mutated), /Invisible Stranger/);
+});
+
+test("the seed identity is deterministic and marks every seeded row", () => {
+  assert.match(deterministicUuid("space:Archivo Adeyemi:seed-steward@example.test"), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  const first = seedIdentity(EXAMPLE_SEED_PLAN);
+  const second = seedIdentity(EXAMPLE_SEED_PLAN);
+  assert.equal(first.spaceId, second.spaceId);
+  assert.equal(first.stewardUserId, second.stewardUserId);
+  assert.notEqual(first.spaceId, first.stewardUserId);
+  const otherPlan: SeedPlan = { ...EXAMPLE_SEED_PLAN, spaceName: "Another Archive" };
+  assert.notEqual(seedIdentity(otherPlan).spaceId, first.spaceId);
 });

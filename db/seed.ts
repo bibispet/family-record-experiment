@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   BirthDateAccuracy,
   MediaKind,
@@ -6,6 +7,30 @@ import type {
 } from "../app/lib/domain";
 
 // D1Database and D1PreparedStatement are ambient from @cloudflare/workers-types.
+
+/**
+ * Deterministic, UUID-shaped ids derived from a plan's own labels. Everything
+ * the seed writes is scoped to exactly one space and one steward user, so the
+ * plan itself is the marker: purge those two ids and every example row is
+ * gone. Stable across runs and machines; never collides with the app's
+ * random UUIDs unless someone reuses the exact seed label.
+ */
+export function deterministicUuid(label: string): string {
+  const digest = createHash("sha256").update(`family-record-seed:${label}`).digest("hex").slice(0, 32);
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20)}`;
+}
+
+export type SeedIdentity = {
+  spaceId: string;
+  stewardUserId: string;
+};
+
+export function seedIdentity(plan: SeedPlan): SeedIdentity {
+  return {
+    spaceId: deterministicUuid(`space:${plan.spaceName}:${plan.stewardEmail}`),
+    stewardUserId: deterministicUuid(`user:${plan.stewardEmail}:${plan.stewardSubject}`),
+  };
+}
 
 export type SeedPerson = {
   displayName: string;

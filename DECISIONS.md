@@ -124,3 +124,12 @@
   and the full test suite (83 unit including 8 new seed tests + 19 rendered)
   pass. To view in the app: run once, then sign in through `/dev/sign-in`
   with the seed steward subject.
+## 2026-08-29 — Note: reconciliation narrative predates the preservation event
+
+- The "Copy reconciliation" and "Correction: machine-local" entries above
+  were written before the stranded OneDrive tree was actually preserved to
+  origin. Agent 1 performed the preservation step separately; the pushed
+  ref `refs/heads/archive/onedrive-orphan` (SHA `4d562de`) is recorded and
+  verified on origin. This entry exists so the timeline is not misread as
+  "reconciliation already preserved the tree" — the archive push was a
+  distinct, later action than the DECISIONS.md text.
