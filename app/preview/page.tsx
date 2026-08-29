@@ -1,4 +1,15 @@
+// Build-time guard: import.meta.env.DEV is replaced with false in production
+// builds, making the preview content dead code that the minifier removes.
+// The route still exists (the router discovers it by file path) but it
+// returns 404 via notFound() — the sample data, CSS, and SVG are eliminated
+// from the production bundle entirely.
+//
+// Optional chaining + fallback so tsx (where import.meta.env is undefined)
+// doesn't crash; Vite replaces import.meta.env with a JSON object so the
+// expression evaluates to false in production and true in dev.
+const isDev = import.meta.env?.DEV ?? true;
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Lore — preview",
@@ -12,92 +23,95 @@ const PEOPLE = {
 };
 
 export default function PreviewPage() {
-  return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <main className="lore-canvas">
-        <header className="lore-top">
-          <span className="lore-wordmark">L O R E</span>
-          <div className="lore-mode" role="group" aria-label="Mode">
-            <button className="lore-mode-btn is-active" type="button">View</button>
-            <button className="lore-mode-btn" type="button">Edit</button>
-          </div>
-        </header>
+  if (isDev) {
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: CSS }} />
+        <main className="lore-canvas">
+          <header className="lore-top">
+            <span className="lore-wordmark">L O R E</span>
+            <div className="lore-mode" role="group" aria-label="Mode">
+              <button className="lore-mode-btn is-active" type="button">View</button>
+              <button className="lore-mode-btn" type="button">Edit</button>
+            </div>
+          </header>
 
-        <ol className="lore-ruler" aria-label="Generations">
-          <li>G3</li>
-          <li>G2</li>
-          <li>G1</li>
-          <li className="is-current">G0</li>
-        </ol>
+          <ol className="lore-ruler" aria-label="Generations">
+            <li>G3</li>
+            <li>G2</li>
+            <li>G1</li>
+            <li className="is-current">G0</li>
+          </ol>
 
-        <svg className="lore-graph" viewBox="0 0 720 470" role="img"
-             aria-label="Two forebears joining at a shared node, descending to you">
-          <defs>
-            <radialGradient id="sphereLight" cx="35%" cy="30%">
-              <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="65%" stopColor="#e2e0da" />
-              <stop offset="100%" stopColor="#b9b6ad" />
-            </radialGradient>
-            <radialGradient id="sphereDark" cx="35%" cy="28%">
-              <stop offset="0%" stopColor="#6d6a63" />
-              <stop offset="55%" stopColor="#2b2a27" />
-              <stop offset="100%" stopColor="#111110" />
-            </radialGradient>
-            <filter id="lift" x="-40%" y="-40%" width="180%" height="180%">
-              <feDropShadow dx="0" dy="6" stdDeviation="7" floodOpacity="0.18" />
-            </filter>
-          </defs>
+          <svg className="lore-graph" viewBox="0 0 720 470" role="img"
+               aria-label="Two forebears joining at a shared node, descending to you">
+            <defs>
+              <radialGradient id="sphereLight" cx="35%" cy="30%">
+                <stop offset="0%" stopColor="#ffffff" />
+                <stop offset="65%" stopColor="#e2e0da" />
+                <stop offset="100%" stopColor="#b9b6ad" />
+              </radialGradient>
+              <radialGradient id="sphereDark" cx="35%" cy="28%">
+                <stop offset="0%" stopColor="#6d6a63" />
+                <stop offset="55%" stopColor="#2b2a27" />
+                <stop offset="100%" stopColor="#111110" />
+              </radialGradient>
+              <filter id="lift" x="-40%" y="-40%" width="180%" height="180%">
+                <feDropShadow dx="0" dy="6" stdDeviation="7" floodOpacity="0.18" />
+              </filter>
+            </defs>
 
-          <path className="lore-edge" d="M155,97 C230,150 300,175 360,233" />
-          <path className="lore-edge" d="M566,96 C500,150 425,175 362,233" />
-          <path className="lore-edge" d="M361,244 L361,325" />
-          <path className="lore-edge" d="M361,366 L361,447" />
+            <path className="lore-edge" d="M155,97 C230,150 300,175 360,233" />
+            <path className="lore-edge" d="M566,96 C500,150 425,175 362,233" />
+            <path className="lore-edge" d="M361,244 L361,325" />
+            <path className="lore-edge" d="M361,366 L361,447" />
 
-          <circle cx="155" cy="97" r="17" fill="url(#sphereLight)" filter="url(#lift)" />
-          <circle cx="566" cy="96" r="17" fill="url(#sphereDark)" filter="url(#lift)" />
+            <circle cx="155" cy="97" r="17" fill="url(#sphereLight)" filter="url(#lift)" />
+            <circle cx="566" cy="96" r="17" fill="url(#sphereDark)" filter="url(#lift)" />
 
-          <g className="lore-joint">
-            <circle cx="361" cy="234" r="10" />
-            <text x="361" y="237">G1</text>
-          </g>
+            <g className="lore-joint">
+              <circle cx="361" cy="234" r="10" />
+              <text x="361" y="237">G1</text>
+            </g>
 
-          <g className="lore-you">
-            <circle cx="361" cy="345" r="22" filter="url(#lift)" />
-            <text x="361" y="349">YOU</text>
-          </g>
+            <g className="lore-you">
+              <circle cx="361" cy="345" r="22" filter="url(#lift)" />
+              <text x="361" y="349">YOU</text>
+            </g>
 
-          <g className="lore-joint">
-            <circle cx="361" cy="455" r="10" />
-            <text x="361" y="458">G0</text>
-          </g>
-        </svg>
+            <g className="lore-joint">
+              <circle cx="361" cy="455" r="10" />
+              <text x="361" y="458">G0</text>
+            </g>
+          </svg>
 
-        <article className="lore-card lore-card-upper">
-          <div className="lore-card-head">
-            <span className="lore-avatar" aria-hidden="true" />
-            <span className="lore-name">{PEOPLE.motherLine.label}</span>
-            <span className="lore-chev" aria-hidden="true">⌄</span>
-          </div>
-          <div className="lore-redacted" aria-label="Details you cannot see">
-            <span /><span /><span />
-          </div>
-          <span className="lore-lock" title="You can see who this is, not their details">🔒</span>
-        </article>
+          <article className="lore-card lore-card-upper">
+            <div className="lore-card-head">
+              <span className="lore-avatar" aria-hidden="true" />
+              <span className="lore-name">{PEOPLE.motherLine.label}</span>
+              <span className="lore-chev" aria-hidden="true">⌄</span>
+            </div>
+            <div className="lore-redacted" aria-label="Details you cannot see">
+              <span /><span /><span />
+            </div>
+            <span className="lore-lock" title="You can see who this is, not their details">🔒</span>
+          </article>
 
-        <article className="lore-card lore-card-lower">
-          <div className="lore-card-head">
-            <span className="lore-avatar" aria-hidden="true" />
-            <span className="lore-name">{PEOPLE.fatherLine.label}</span>
-            <span className="lore-chev" aria-hidden="true">⌄</span>
-          </div>
-        </article>
+          <article className="lore-card lore-card-lower">
+            <div className="lore-card-head">
+              <span className="lore-avatar" aria-hidden="true" />
+              <span className="lore-name">{PEOPLE.fatherLine.label}</span>
+              <span className="lore-chev" aria-hidden="true">⌄</span>
+            </div>
+          </article>
 
-        <button className="lore-step" type="button" aria-label="Next">›</button>
-        <button className="lore-spark" type="button" aria-label="Assist">✦</button>
-      </main>
-    </>
-  );
+          <button className="lore-step" type="button" aria-label="Next">›</button>
+          <button className="lore-spark" type="button" aria-label="Assist">✦</button>
+        </main>
+      </>
+    );
+  }
+  notFound();
 }
 
 const CSS = `

@@ -1,3 +1,13 @@
+// Build-time guard: import.meta.env.DEV is replaced with false in production
+// builds, making every dev-only branch dead code that the minifier removes.
+// The route handlers still exist (the router discovers them by file path) but
+// they return 404 — the sign-in form HTML, cookie logic, and identity imports
+// are eliminated from the production bundle entirely.
+//
+// Optional chaining + fallback so tsx (where import.meta.env is undefined)
+// doesn't crash; Vite replaces import.meta.env with a JSON object so the
+// expression evaluates to false in production and true in dev.
+const isDev = import.meta.env?.DEV ?? true;
 import { assertSafeMutation, routeError } from "../../lib/api";
 import {
   assertLocalIdentityDevelopmentOnly,
@@ -118,6 +128,7 @@ function formText(form: FormData, name: string): string {
 }
 
 export function GET(request: Request): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   const requestedReturnTo = new URL(request.url).searchParams.get("return_to") ?? "/family";
   const values = { ...EMPTY_VALUES, returnTo: safeLocalIdentityReturnTo(requestedReturnTo) };
@@ -125,6 +136,7 @@ export function GET(request: Request): Response {
 }
 
 export function HEAD(): Response {
+  if (!isDev) return new Response(null, { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   return new Response(null, {
     headers: {
@@ -136,6 +148,7 @@ export function HEAD(): Response {
 }
 
 export function OPTIONS(): Response {
+  if (!isDev) return new Response(null, { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   return new Response(null, {
     status: 204,
@@ -147,6 +160,7 @@ export function OPTIONS(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   try {
     assertSafeMutation(request);
@@ -195,13 +209,16 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export function PUT(): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   return guardedMethodNotAllowed();
 }
 
 export function PATCH(): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   return guardedMethodNotAllowed();
 }
 
 export function DELETE(): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   return guardedMethodNotAllowed();
 }

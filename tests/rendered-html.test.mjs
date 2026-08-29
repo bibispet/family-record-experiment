@@ -29,7 +29,9 @@ test("redirects anonymous family pages to dispatch-owned sign in", async () => {
   // deny provider offers no sign-in URL at all, so this redirect behavior is
   // asserted with the header adapter explicitly selected.
   const previous = process.env.IDENTITY_PROVIDER;
+  const previousProxy = process.env.TRUSTED_IDENTITY_PROXY;
   process.env.IDENTITY_PROVIDER = "header";
+  process.env.TRUSTED_IDENTITY_PROXY = "1";
   try {
     const response = await request("/family", {
       headers: { accept: "text/html" },
@@ -40,6 +42,8 @@ test("redirects anonymous family pages to dispatch-owned sign in", async () => {
   } finally {
     if (previous === undefined) delete process.env.IDENTITY_PROVIDER;
     else process.env.IDENTITY_PROVIDER = previous;
+    if (previousProxy === undefined) delete process.env.TRUSTED_IDENTITY_PROXY;
+    else process.env.TRUSTED_IDENTITY_PROXY = previousProxy;
   }
 });
 
