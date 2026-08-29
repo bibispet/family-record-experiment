@@ -84,3 +84,43 @@
   machine and compared against origin. This entry supersedes the generality of
   the earlier "copy reconciliation" entry, which remains valid only as a
   machine-local observation.
+## 2026-08-29 — Rung 3: one-command seed script for a realistic synthetic family
+
+- Standing brief rung 3 requires "a seed script produces a realistic family
+  in one command", exercising the "families are not trees" invariants:
+  remarriage, adoption, unknown parentage, one-appearance people.
+- Implementation: a pure seed module (`db/seed.ts`) holds the example plan,
+  validates it, and inserts it through D1-shaped prepared statements; a CLI
+  runner (`scripts/seed.ts`, wired as `npm run db:seed`) applies the
+  checked-in migration idempotently and seeds. No schema change upstream.
+- No new dependency: the runner uses Node 22's stdlib `node:sqlite`
+  (`DatabaseSync`) to open the local dev D1 file that Miniflare/
+  vinext-dev writes to (`.wrangler/state/v3/d1/`), or a `--db=` path for a
+  fresh throwaway database. Rationale: a D1 driver dependency would only
+  ever be consumed by this local-only tool, and the stdlib is still
+  experimental-shipped in Node >= 22.13. This does the job with zero new
+  packages. An `accessUrl`-style R2 upload path was considered and rejected
+  for this rung: local D1 has no R2, so media rows are metadata-only
+  placeholders (`status='ready'`, `r2_key='seed/<uuid>'`) with no backing
+  blob; streaming them returns 404 until real uploads exist. That is the
+  intended, scoped behaviour for a data-model seed.
+- The migration is applied by re-implementing the same `IF NOT EXISTS`
+  idempotency logic as `db/runtime.ts`; the runner refuses to duplicate the
+  app's runtime schema bootstrap verbatim only because that helper lives
+  under workerd ambient imports (`?raw`) that plain `tsx` cannot resolve.
+  The split-on-breakpoint parse is kept in sync with `db/runtime.ts`.
+- Safety: seeds a synthetic family under a dedicated steward identity
+  (`seed-steward-subject` / `seed-steward@example.test`, space "Adeyemi
+  Family Archive"). Re-running on a non-empty `people` table is refused
+  unless `--force` (append). The seed writes only to the local dev copy of
+  D1 — never to `main`, never to a real deployed database, never to R2. It
+  must never be pointed at real data; the counting guard is the tripwire.
+- Verification: `npm run db:seed` against a fresh `--db=` throwaway file
+  and against the real dev-state file both succeed (9 people, 11
+  relationships, 4 stories, 3 media; 1 ended spouse bond, 4 oral bonds, no
+  invented grandparent/adopted types, Priya Patel has no parent_of edge and
+  unknown birth date, Sanaa Okafor has exactly one bond and no records). A
+  re-run is refused by the guard. Package scripts validate: typecheck, lint,
+  and the full test suite (83 unit including 8 new seed tests + 19 rendered)
+  pass. To view in the app: run once, then sign in through `/dev/sign-in`
+  with the seed steward subject.

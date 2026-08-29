@@ -16,7 +16,8 @@
     "test:live": "node tests/live-http-smoke.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
