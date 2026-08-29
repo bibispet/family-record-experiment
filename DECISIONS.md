@@ -60,3 +60,27 @@
   test-proven (`tests/identity.test.ts`, `tests/api.test.ts`,
   `tests/authz.test.ts`, `tests/rendered-html.test.mjs`). Stack claims
   (Drizzle `db/schema.ts`, `vite.config.ts`, `worker/index.ts`) confirmed.
+## 2026-08-29 — Correction: "only two copies" was machine-local, plus preservation action
+
+- Decision: The 2026-08-29 entry above said "only two copies were found on
+  this machine" and framed copy reconciliation as if it were global. That was
+  overreaching. Copy topology is **machine-local knowledge, not global fact**:
+  a second machine (not visible from here) has its own clones and reported a
+  different branch topology. Per standing brief v2, canonical is defined as
+  the git remote (`origin` = `bibispet/family-record-experiment`), never a
+  local directory. A working copy is only as current as its last fetch.
+- Preservation action: The stranded Windows tree's orphan history was pushed
+  to origin before anything was retired — `git push origin
+  4d562de:refs/heads/archive/onedrive-orphan` (verified on origin at SHA
+  `4d562de`). A prior-created `archive/win-onedrive` branch (at `bd6322f`,
+  an older state of the canonical `audit-b` graph-preview work) was also
+  present on origin from another machine. `git fsck --lost-found` reported no
+  dangling commits on the canonical machine. The lone local-only-tip state
+  (`local audit-b` ahead of `origin/audit-b` by `d6d7ce1 preview: graph view
+  from the Lore mockup`) is already merged into `origin/dev-signin-a`, so no
+  work was at risk.
+- Consequence: no source-of-truth conclusion here extends beyond this machine.
+  Rankings of "most evolved" are provisional until re-fetched on any other
+  machine and compared against origin. This entry supersedes the generality of
+  the earlier "copy reconciliation" entry, which remains valid only as a
+  machine-local observation.
