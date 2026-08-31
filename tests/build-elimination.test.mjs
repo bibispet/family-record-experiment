@@ -96,6 +96,12 @@ test("built worker returns 404 for dev routes (primary proof — behavioural, ma
 // We do NOT assert on constant names (LOCAL_IDENTITY_COOKIE_NAME) or function
 // names (serializeLocalIdentityCookie, createLocalIdentityProvider) because
 // those are renamed by minification — their absence would be a vacuous pass.
+//
+// CANARY, NOT THE PROOF: these greps are a canary. The real evidence is the
+// 404 test above — the built worker returning 404 for each /dev/* route. Do
+// not delete that behavioural test under the impression that these string
+// greps cover elimination; they only catch the exact literal values listed
+// here. Keep the 404 assertions.
 // ---------------------------------------------------------------------------
 
 // String values that only appear in dev-only code. If any of these survive

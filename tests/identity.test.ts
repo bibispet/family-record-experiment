@@ -494,9 +494,9 @@ test("development sign-in guard is re-checked on every request", async () => {
     const response = await fetchBuiltWorker(tag, "/dev/sign-in", { method: "GET" });
     assert.equal(response.status, 404, "build-time guard must eliminate dev routes from production build");
   });
-  // Through direct handler calls (tsx), DEV_MODE=1 is set via --import
-  // (tests/setup-dev-mode.ts) so isDev is true. The runtime guard is
-  // re-checked on every request.
+  // Through direct handler calls (tsx), FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1 is
+  // set via --import (tests/setup-dev-mode.ts) so the local identity guard's
+  // dev-mode condition is true. The runtime guard is re-checked on every request.
   await withEnvAsync(LOCAL_ALLOWED, () => {
     assert.doesNotThrow(() => devSignInRoute.GET(new Request("http://localhost/dev/sign-in")));
   });
