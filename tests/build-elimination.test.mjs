@@ -3,22 +3,34 @@
 // at runtime. import.meta.env.DEV is replaced with false during `vinext build`,
 // making every dev-only branch dead code that the minifier removes.
 //
-// This test asserts on the symbols that matter — the local adapter's identity
-// imports, the cookie serializers — not on UI copy that could be renamed without
-// fixing the underlying leak. It also builds fresh so a stale dist/ cannot pass
-// for the wrong reason.
+// ── What this test checks ─────────────────────────────────────────────────
+//
+// The PRIMARY proof is behavioural: the built worker returns 404 for /dev/*
+// routes. This is mangling-proof — it doesn't depend on symbol names surviving
+// minification.
+//
+// The SECONDARY proof is string-based: we grep the bundle for string *values*
+// that minification cannot rename — the cookie name value, form field names,
+// button text, sample data. We do NOT grep for constant names or function
+// names (serializeLocalIdentityCookie, createLocalIdentityProvider, etc.)
+// because minifiers rename those — a vacuous pass on a security check.
+//
+// This test also builds fresh so a stale dist/ cannot pass for the wrong
+// reason.
+// ─────────────────────────────────────────────────────────────────────────
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { join, dirname, basename } from "node:path";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "..", "dist");
 
 // ---------------------------------------------------------------------------
-// Build freshness: the test builds itself so it never passes over a stale bundle.
+// Build freshness: the test builds itself so it never passes over a stale
+// bundle.
 // ---------------------------------------------------------------------------
 test("production build is fresh", () => {
   execSync("npm run build", { cwd: join(__dirname, ".."), stdio: "pipe" });
@@ -49,119 +61,90 @@ function readAllJs() {
 }
 
 // ---------------------------------------------------------------------------
-// Symbol-level assertions: these are the exports that only the dev routes
-// import from identity.ts. If they survive in a /dev/* route chunk, the
-// build-time guard did not eliminate the dev-only code.
+// PRIMARY PROOF (behavioural, mangling-proof): the built worker returns 404
+// for /dev/sign-in and /dev/sign-out. This is the strongest assertion — it
+// proves the routes are stubs at the HTTP level, regardless of what symbols
+// or strings survive in the bundle.
 // ---------------------------------------------------------------------------
-const DEV_ONLY_IDENTITY_SYMBOLS = [
-  "assertLocalIdentityDevelopmentOnly",
-  "serializeLocalIdentityCookie",
-  "serializeClearedLocalIdentityCookie",
-  "safeLocalIdentityReturnTo",
-];
-
-const DEV_ONLY_API_SYMBOLS = [
-  "assertSafeMutation",
-];
-
-test("dev-only identity imports are absent from the production build", () => {
-  const allOutput = readAllJs();
-  for (const symbol of DEV_ONLY_IDENTITY_SYMBOLS) {
-    assert.ok(
-      !allOutput.includes(symbol),
-      `Identity symbol "${symbol}" found in production build — the dev route's import was not eliminated`,
+test("built worker returns 404 for dev routes (primary proof — behavioural, mangling-proof)", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  const { default: worker } = await import(workerUrl.href);
+  const ctx = {
+    ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+  };
+  const env = { waitUntil() {}, passThroughOnException() {} };
+  for (const path of ["/dev/sign-in", "/dev/sign-out"]) {
+    const response = await worker.fetch(
+      new Request(`http://localhost${path}`, { method: "GET" }),
+      ctx,
+      env,
     );
-  }
-});
-
-test("dev-only api imports are absent from the production build", () => {
-  const allOutput = readAllJs();
-  for (const symbol of DEV_ONLY_API_SYMBOLS) {
-    assert.ok(
-      !allOutput.includes(symbol),
-      `API symbol "${symbol}" found in production build — the dev route's import was not eliminated`,
+    assert.equal(
+      response.status,
+      404,
+      `${path} must return 404 in the production build — got ${response.status}`,
     );
   }
 });
 
 // ---------------------------------------------------------------------------
-// Cookie serializer: the local identity cookie name is a public constant, but
-// the serializer functions that create/clear the cookie are dev-only. If they
-// survive, the cookie machinery is in the production bundle.
+// SECONDARY PROOF (string-based, mangling-proof): grep the bundle for string
+// *values* that minification cannot rename. Minifiers rename function and
+// variable names but never string literals. If these strings survive, the
+// dev-only code is present in the bundle.
+//
+// We do NOT assert on constant names (LOCAL_IDENTITY_COOKIE_NAME) or function
+// names (serializeLocalIdentityCookie, createLocalIdentityProvider) because
+// those are renamed by minification — their absence would be a vacuous pass.
 // ---------------------------------------------------------------------------
-test("local identity cookie serializer is absent from the production build", () => {
+
+// String values that only appear in dev-only code. If any of these survive
+// in the production bundle, the dev route handler body was not eliminated.
+//
+// NOTE: We do NOT include the cookie name value ("family_record_local_identity")
+// or the path strings ("/dev/sign-in", "/dev/sign-out") because those appear
+// in the identity module (identity.ts) which is production code — the local
+// adapter's cookie reader and LOCAL_RESERVED_PATHS are bundled regardless of
+// which adapter is selected. Only strings that exist solely in the dev route
+// handler bodies belong here.
+const DEV_ONLY_STRINGS = [
+  // Form field names from the sign-in HTML
+  "subject_id",
+  // Button text from the sign-in/sign-out forms
+  "Sign in locally",
+  "Clear local sign-in cookie",
+  // Sign-in page heading
+  "Sign in to your local family record",
+  // Sign-out helper message
+  "Use the sign-out button on /dev/sign-in",
+];
+
+test("dev-only string values are absent from the production build (secondary proof — mangling-proof)", () => {
   const allOutput = readAllJs();
-  // The cookie name is exported and used by route-layer code, so it may appear.
-  // But the serializer function bodies should not.
-  assert.ok(
-    !allOutput.includes("serializeLocalIdentityCookie"),
-    "serializeLocalIdentityCookie (the cookie serializer) found in production build",
-  );
-  assert.ok(
-    !allOutput.includes("serializeClearedLocalIdentityCookie"),
-    "serializeClearedLocalIdentityCookie (the cookie clearer) found in production build",
-  );
+  for (const needle of DEV_ONLY_STRINGS) {
+    assert.ok(
+      !allOutput.includes(needle),
+      `Dev-only string "${needle}" found in production build — the dev route handler body was not eliminated`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
-// Local adapter: the local identity provider factory should not appear in
-// the production build. The header adapter and deny adapter are fine — they
-// are production code. The local adapter is dev-only.
-// ---------------------------------------------------------------------------
-test("local identity adapter is absent from the production build", () => {
-  const allOutput = readAllJs();
-  assert.ok(
-    !allOutput.includes("createLocalIdentityProvider"),
-    "createLocalIdentityProvider found in production build — the local adapter was not eliminated",
-  );
-  assert.ok(
-    !allOutput.includes("LOCAL_IDENTITY_COOKIE_NAME"),
-    "LOCAL_IDENTITY_COOKIE_NAME found in production build — the local adapter's cookie constant was not eliminated",
-  );
-});
-
-// ---------------------------------------------------------------------------
-// /dev/* route chunks: the route files still exist (the router discovers them
-// by file path) but they should be 404 stubs. The route chunk should not
-// contain any HTML, form fields, or cookie logic — just the 404 response.
-// ---------------------------------------------------------------------------
-test("dev route handlers are 404 stubs in the production build", () => {
-  const allOutput = readAllJs();
-  // The route path strings appear in route discovery metadata — that's fine.
-  // What matters is that no dev-only form fields, cookie logic, or
-  // identity-guard calls survive in the bundle. The symbol tests above
-  // already cover the imports; this test covers the form HTML and cookie
-  // logic that would only exist if the handler body was not eliminated.
-  assert.ok(
-    !allOutput.includes("subject_id"),
-    "Sign-in form field \"subject_id\" found in production build — the dev route handler body was not eliminated",
-  );
-  assert.ok(
-    !allOutput.includes("Sign in locally"),
-    "Sign-in button text \"Sign in locally\" found in production build — the dev route handler body was not eliminated",
-  );
-  assert.ok(
-    !allOutput.includes("Clear local sign-in cookie"),
-    "Sign-out button text \"Clear local sign-in cookie\" found in production build — the dev route handler body was not eliminated",
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Preview page: the sample data and CSS should be eliminated. The page
-// component should call notFound() in production.
+// Preview page: sample data and CSS class names are string values that
+// minification cannot rename. If they survive, the preview page content was
+// not eliminated.
 // ---------------------------------------------------------------------------
 test("preview page sample data is absent from the production build", () => {
   const allOutput = readAllJs();
-  assert.ok(
-    !allOutput.includes("Millie Stewart"),
-    "Preview sample data \"Millie Stewart\" found in production build",
-  );
-  assert.ok(
-    !allOutput.includes("Bob Stewart"),
-    "Preview sample data \"Bob Stewart\" found in production build",
-  );
-  assert.ok(
-    !allOutput.includes("lore-canvas"),
-    "Preview CSS class \"lore-canvas\" found in production build",
-  );
+  const PREVIEW_STRINGS = [
+    "Millie Stewart",
+    "Bob Stewart",
+    "lore-canvas",
+  ];
+  for (const needle of PREVIEW_STRINGS) {
+    assert.ok(
+      !allOutput.includes(needle),
+      `Preview-only string "${needle}" found in production build`,
+    );
+  }
 });

@@ -6,16 +6,13 @@
 //
 // Deny-by-default: when import.meta.env is not substituted (tsx, direct
 // imports, SSR paths, a different bundler), the expression evaluates to
-// false. Vite replaces import.meta.env with a JSON object so the
-// expression evaluates to true in dev and false in production. Tests must
-// opt in explicitly.
-// Deny-by-default: when import.meta.env is not substituted (tsx, direct
-// imports, SSR paths, a different bundler), the expression evaluates to
 // false. Vite replaces import.meta.env with a JSON object so DEV is false
-// in production and true in dev. The process.env.DEV_MODE fallback lets
-// tests opt in explicitly. In production, import.meta.env.DEV is false
-// (not nullish) so ?? short-circuits and the fallback is dead code.
-const isDev = import.meta.env?.DEV ?? (process.env?.DEV_MODE === "1");
+// in production and true in dev. The process.env fallback lets tests opt
+// in explicitly using the same flag that gates the local identity adapter
+// (FAMILY_RECORD_ALLOW_LOCAL_IDENTITY) — one flag per boundary. In
+// production, import.meta.env.DEV is false (not nullish) so ?? short-circuits
+// and the fallback is dead code.
+const isDev = import.meta.env?.DEV ?? (process.env?.FAMILY_RECORD_ALLOW_LOCAL_IDENTITY === "1");
 import { assertSafeMutation, routeError } from "../../lib/api";
 import {
   assertLocalIdentityDevelopmentOnly,

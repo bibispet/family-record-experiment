@@ -395,10 +395,10 @@ test("local adapter refuses to initialise outside development even with the opt-
 });
 
 test("local adapter requires the explicit opt-in flag even in development", () => {
-  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "development" }, () => {
+  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "development", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: undefined }, () => {
     assert.throws(() => getIdentityProvider(), /FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1/);
   });
-  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "test" }, () => {
+  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "test", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: undefined }, () => {
     assert.throws(() => getIdentityProvider(), /FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1/);
   });
   withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "development", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "0" }, () => {
