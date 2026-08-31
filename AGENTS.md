@@ -1,3 +1,5 @@
+Read LORE-AGENT-BRIEF.md first, then its Section 8.
+
 # AGENTS.md
 
 ## What this project is
