@@ -11,7 +11,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "npm run build && npm run test:unit && npm run test:render && npm run test:build",
-    "test:unit": "tsx --test tests/*.test.ts",
+    "test:unit": "tsx --import ./tests/setup-dev-mode.ts --test tests/*.test.ts",
     "test:render": "node --test tests/rendered-html.test.mjs",
     "test:build": "node --test tests/build-elimination.test.mjs",
     "test:live": "node tests/live-http-smoke.mjs",

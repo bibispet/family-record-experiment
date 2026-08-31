@@ -4,10 +4,20 @@
 // they return 404 — the sign-in form HTML, cookie logic, and identity imports
 // are eliminated from the production bundle entirely.
 //
-// Optional chaining + fallback so tsx (where import.meta.env is undefined)
-// doesn't crash; Vite replaces import.meta.env with a JSON object so the
-// expression evaluates to false in production and true in dev.
-const isDev = import.meta.env?.DEV ?? true;
+// Deny-by-default: when import.meta.env is not substituted (tsx, direct
+// imports, SSR paths, a different bundler), the expression evaluates to
+// false. Vite replaces import.meta.env with a JSON object so the
+// expression evaluates to true in dev and false in production. Tests must
+// opt in explicitly — the flag guarding the credentials cannot be the
+// exception to deny-by-default.
+// Deny-by-default: when import.meta.env is not substituted (tsx, direct
+// imports, SSR paths, a different bundler), the expression evaluates to
+// false. Vite replaces import.meta.env with a JSON object so DEV is false
+// in production and true in dev. The process.env.DEV_MODE fallback lets
+// tests opt in explicitly — the flag guarding the credentials cannot be
+// the exception to deny-by-default. In production, import.meta.env.DEV is
+// false (not nullish) so ?? short-circuits and the fallback is dead code.
+const isDev = import.meta.env?.DEV ?? (process.env?.DEV_MODE === "1");
 import { assertSafeMutation, routeError } from "../../lib/api";
 import {
   assertLocalIdentityDevelopmentOnly,

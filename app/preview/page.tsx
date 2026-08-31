@@ -4,10 +4,11 @@
 // returns 404 via notFound() — the sample data, CSS, and SVG are eliminated
 // from the production bundle entirely.
 //
-// Optional chaining + fallback so tsx (where import.meta.env is undefined)
-// doesn't crash; Vite replaces import.meta.env with a JSON object so the
-// expression evaluates to false in production and true in dev.
-const isDev = import.meta.env?.DEV ?? true;
+// Deny-by-default: when import.meta.env is not substituted (tsx, direct
+// imports, SSR paths, a different bundler), the expression evaluates to
+// false. Vite replaces import.meta.env with a JSON object so the
+// expression evaluates to true in dev and false in production.
+const isDev = import.meta.env?.DEV ?? false;
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
