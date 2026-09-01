@@ -176,3 +176,27 @@
   visible. Revisit before first deploy: split the local adapter into a
 
   dev-only module and extend the elimination test for its symbols.
+
+
+## 2026-09-01 — rung-2 chain landed; revert handles recorded
+
+- The PR chain `hardening/rung2-dev-routes → dev-signin-a → main` is
+  complete. Every merge was created with `--no-ff` so each is a single,
+  individually reverrible unit (auth/identity scope — see Standing brief 8).
+  Both parents were green and the merged result was re-verified (typecheck +
+  lint + the full test suite, including the build-elimination proof that the
+  built worker 404s every dev route) before each merge was pushed.
+
+- Merge 1 — hardening into dev-signin-a:
+  - commit: `dfddde5`
+  - revert handle: `git revert -m 1 dfddde5`
+
+- Merge 2 — dev-signin-a into main (carries CRUD, graph, dev sign-in, seed,
+  and the hardening):
+  - commit: `0567a12`
+  - revert handle: `git revert -m 1 0567a12`
+
+- Notes for a revert: use `--no-edit` and default to reverting the whole
+  merge. If you need to keep any post-merge DECISIONS.md entries, cherry-pick
+  them forward after reverting; they are documentation, not code.
+
