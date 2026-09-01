@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 // Build-time guard: import.meta.env.DEV is replaced with false in production
 // builds, making every dev-only branch dead code that the minifier removes.
 // The route handlers still exist (the router discovers them by file path) but

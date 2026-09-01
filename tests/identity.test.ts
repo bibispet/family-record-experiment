@@ -497,12 +497,12 @@ test("development sign-in guard is re-checked on every request", async () => {
   // Through direct handler calls (tsx), FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1 is
   // set via --import (tests/setup-dev-mode.ts) so the local identity guard's
   // dev-mode condition is true. The runtime guard is re-checked on every request.
-  await withEnvAsync(LOCAL_ALLOWED, () => {
+  await withEnvAsync(LOCAL_ALLOWED, async () => {
     assert.doesNotThrow(() => devSignInRoute.GET(new Request("http://localhost/dev/sign-in")));
   });
   await withEnvAsync(
     { IDENTITY_PROVIDER: "local", NODE_ENV: "production", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "1" },
-    () => assert.throws(
+    async () => assert.throws(
       () => devSignInRoute.GET(new Request("http://localhost/dev/sign-in")),
       /refusing to initialise the local identity provider outside development/,
     ),
