@@ -22,6 +22,49 @@ const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
 // Set to "1" to allow the local development adapter. See
 // assertLocalIdentityDevelopmentOnly for why this alone is not sufficient.
 const LOCAL_IDENTITY_FLAG = "FAMILY_RECORD_ALLOW_LOCAL_IDENTITY";
+
+// Set to "1" to confirm the deployment is behind a trusted reverse proxy that
+// strips inbound oai-authenticated-* headers and sets them itself. Without
+// this, any visitor can forge identity headers and bypass authentication.
+//
+// ── Deployment contract for TRUSTED_IDENTITY_PROXY=1 ──────────────────────
+//
+// Setting this flag to "1" is an assertion that ALL of the following are true
+// in the production deployment. If any one is false, the flag is dishonest and
+// the application is unauthenticated in practice.
+//
+//  1. A reverse proxy (or equivalent gateway) sits in front of the Worker.
+//
+//  2. The proxy strips or overwrites these inbound headers on EVERY request,
+//     regardless of what the visitor sent:
+//       • oai-authenticated-user-id
+//       • oai-authenticated-user-email
+//       • oai-authenticated-user-full-name
+//       • oai-authenticated-user-full-name-encoding
+//
+//  3. The proxy sets those headers itself, sourcing them from a trusted
+//     authentication system (e.g. OAuth/OIDC, ChatGPT auth, SSO). The Worker
+//     never receives credentials — only the proxy-asserted identity.
+//
+//  4. The Worker is NOT reachable without passing through the proxy. If a
+//     visitor can hit the Worker directly (bypassing the proxy), they can
+//     forge identity headers. This means:
+//       • The Worker's origin must not be publicly discoverable.
+//       • If using Cloudflare Workers, the route must be configured so the
+//         only ingress is through the proxy, not through the raw
+//         *.workers.dev domain.
+//
+//  5. The proxy and the Worker share a trust boundary. There is no scenario
+//     in which a visitor controls the headers that reach the Worker. If the
+//     proxy is ever reconfigured to pass client headers through, this flag
+//     must be set to "0" (or removed) until the configuration is restored.
+//
+// If any of these conditions cannot be guaranteed, do NOT set this flag.
+// The header adapter will refuse to initialise, and the deny adapter will
+// take over — returning 401 for every authenticated request. This is the
+// safe failure mode.
+// ────────────────────────────────────────────────────────────────────────
+const TRUSTED_PROXY_FLAG = "TRUSTED_IDENTITY_PROXY";
 export const LOCAL_IDENTITY_COOKIE_NAME = "family_record_local_identity";
 const LOCAL_IDENTITY_COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60;
 const DEV_SIGN_IN_PATH = "/dev/sign-in";
@@ -87,6 +130,18 @@ function readEnv(name: string): string {
 // runtime identifies as development/test AND an explicit opt-in flag is set,
 // and it fails loudly (throws) rather than silently falling back. A deployed
 // Worker has neither, and unknown NODE_ENV values are treated as hostile.
+// The header adapter trusts request headers that only a trusted reverse proxy
+// can set. If the proxy is not explicitly confirmed, the adapter refuses to
+// initialise — any visitor could forge the headers otherwise. Like the local
+// adapter, it fails loudly (throws) rather than silently falling back.
+export function assertTrustedProxyConfigured(): void {
+  if (readEnv(TRUSTED_PROXY_FLAG) !== "1") {
+    throw new Error(
+      `identity: refusing to initialise the header identity provider without ${TRUSTED_PROXY_FLAG}=1 (a trusted proxy must be explicitly configured to set authentication headers)`,
+    );
+  }
+}
+
 export function assertLocalIdentityDevelopmentOnly(): void {
   const nodeEnv = readEnv("NODE_ENV").toLowerCase().trim();
   if (nodeEnv !== "development" && nodeEnv !== "test") {
@@ -179,6 +234,7 @@ export function safeLocalIdentityReturnTo(value: string): string {
 }
 
 function createHeaderIdentityProvider(): IdentityProvider {
+  assertTrustedProxyConfigured();
   const SIGN_IN_PATH = "/signin-with-chatgpt";
   const SIGN_OUT_PATH = "/signout-with-chatgpt";
   const CALLBACK_PATH = "/callback";
@@ -187,6 +243,7 @@ function createHeaderIdentityProvider(): IdentityProvider {
   return {
     name: "header",
     resolveViewer(headers: Headers): Viewer | null {
+      assertTrustedProxyConfigured();
       const subjectId = headers.get("oai-authenticated-user-id")?.trim();
       const emailRaw = headers.get("oai-authenticated-user-email")?.trim();
       const email = emailRaw?.toLowerCase();
@@ -202,6 +259,7 @@ function createHeaderIdentityProvider(): IdentityProvider {
       return { subjectId, email, displayName };
     },
     signInPath(returnTo: string): string | null {
+      assertTrustedProxyConfigured();
       const safe = safeRelativeReturnTo(returnTo, reservedPaths);
       return `${SIGN_IN_PATH}?return_to=${encodeURIComponent(safe)}`;
     },

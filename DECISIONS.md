@@ -133,3 +133,46 @@
   verified on origin. This entry exists so the timeline is not misread as
   "reconciliation already preserved the tree" — the archive push was a
   distinct, later action than the DECISIONS.md text.
+
+
+## 2026-09-01 — Local identity adapter ships runtime-gated, not build-eliminated
+
+- Decision: the local identity adapter (createLocalIdentityProvider, the
+
+  cookie reader, and the LOCAL_RESERVED_PATHS path list inside
+
+  app/lib/identity.ts) ships to the production bundle as unreachable code,
+
+  kept unreachable at runtime by assertLocalIdentityDevelopmentOnly().
+
+  It is NOT build-eliminated.
+
+- Rationale / scope: the rung-2 hardening build-eliminates the dev routes
+
+  (/dev/sign-in, /dev/sign-out, /preview — proven behaviourally by the
+
+  built worker returning 404, and by dev-handler-only string-literal greps).
+
+  Splitting the local adapter itself out of identity.ts into a module the
+
+  production entry never imports (a DEV-guarded dynamic import() so the
+
+  bundler drops it) is deferred, as is extending the elimination test to
+
+  cover it.
+
+- Consequence: the local adapter remains one environment misconfiguration
+
+  from being reachable. This is the same argument that drove
+
+  build-elimination for the routes and so applies here. It is a deliberate,
+
+  conscious decision: it BLOCKS DEPLOY (rung 7), not this merge — nothing is
+
+  deployed yet.
+
+- Recorded under standing brief rung 7 to keep the deploy-time blocker
+
+  visible. Revisit before first deploy: split the local adapter into a
+
+  dev-only module and extend the elimination test for its symbols.

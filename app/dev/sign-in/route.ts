@@ -1,3 +1,20 @@
+/// <reference types="vite/client" />
+// Build-time guard: import.meta.env.DEV is replaced with false in production
+// builds, making every dev-only branch dead code that the minifier removes.
+// The route handlers still exist (the router discovers them by file path) but
+// they return 404 — the sign-in form HTML, cookie logic, and identity imports
+// are eliminated from the production bundle entirely.
+//
+// Deny-by-default: when import.meta.env is not substituted (tsx, direct
+// imports, SSR paths, a different bundler), the expression evaluates to
+// false. Vite replaces import.meta.env with a JSON object so DEV is false
+// in production and true in dev. The process.env fallback lets tests opt
+// in explicitly using the same flag that gates the local identity adapter
+// (FAMILY_RECORD_ALLOW_LOCAL_IDENTITY) — one flag per boundary, not a
+// generic DEV_MODE that an unrelated environment could trip. In production,
+// import.meta.env.DEV is false (not nullish) so ?? short-circuits and the
+// fallback is dead code.
+const isDev = import.meta.env?.DEV ?? (process.env?.FAMILY_RECORD_ALLOW_LOCAL_IDENTITY === "1");
 import { assertSafeMutation, routeError } from "../../lib/api";
 import {
   assertLocalIdentityDevelopmentOnly,
@@ -118,6 +135,7 @@ function formText(form: FormData, name: string): string {
 }
 
 export function GET(request: Request): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   const requestedReturnTo = new URL(request.url).searchParams.get("return_to") ?? "/family";
   const values = { ...EMPTY_VALUES, returnTo: safeLocalIdentityReturnTo(requestedReturnTo) };
@@ -125,6 +143,7 @@ export function GET(request: Request): Response {
 }
 
 export function HEAD(): Response {
+  if (!isDev) return new Response(null, { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   return new Response(null, {
     headers: {
@@ -136,6 +155,7 @@ export function HEAD(): Response {
 }
 
 export function OPTIONS(): Response {
+  if (!isDev) return new Response(null, { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   return new Response(null, {
     status: 204,
@@ -147,6 +167,7 @@ export function OPTIONS(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   assertLocalIdentityDevelopmentOnly();
   try {
     assertSafeMutation(request);
@@ -195,13 +216,16 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 export function PUT(): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   return guardedMethodNotAllowed();
 }
 
 export function PATCH(): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   return guardedMethodNotAllowed();
 }
 
 export function DELETE(): Response {
+  if (!isDev) return new Response("Not Found", { status: 404 });
   return guardedMethodNotAllowed();
 }
