@@ -133,23 +133,6 @@ async function assertGuardedRouteUnavailable(tag: string, path: string, init: Re
   assert.doesNotMatch(await response.text(), /name="subject_id"/i, `${path}: the sign-in form must not render`);
 }
 
-async function postLocalSignIn(tag: string): Promise<Response> {
-  return fetchBuiltWorker(tag, "/dev/sign-in", {
-    method: "POST",
-    redirect: "manual",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-      origin: "http://localhost",
-    },
-    body: new URLSearchParams({
-      subject_id: "route-subject",
-      email: "Route@Example.test",
-      display_name: "Route Developer",
-      return_to: "/family",
-    }).toString(),
-  });
-}
-
 function withRequestCredentials(init: RequestInit, credentials: Record<string, string>): RequestInit {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(credentials)) headers.set(name, value);
