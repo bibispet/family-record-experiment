@@ -13,6 +13,7 @@ import {
   withUpdatedRelationship,
   withRevokedShare,
   withUnlinkedRelationship,
+  filterPeople,
   type FamilyDashboardData,
   type FamilyMedia,
   type FamilyPerson,
@@ -100,6 +101,7 @@ export default function FamilyDashboard({
   const [deletingStoryId, setDeletingStoryId] = useState<string | null>(null);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
+  const [personSearch, setPersonSearch] = useState("");
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
   const [editingRelationshipId, setEditingRelationshipId] = useState<string | null>(null);
   const [editingFamilyName, setEditingFamilyName] = useState(false);
@@ -388,6 +390,7 @@ export default function FamilyDashboard({
         <a href="#bonds">Bonds</a>
         <a href="#memories">Stories &amp; media</a>
         <a href="#shares">Shares</a>
+        <Link href="/family/graph">Graph</Link>
         <Link href="/">Home</Link>
       </nav>
 
@@ -424,8 +427,24 @@ export default function FamilyDashboard({
             {data.people.length === 0 ? (
               <p className="empty-state">No people are visible to you yet.</p>
             ) : (
-              <ul className="people-list">
-                {data.people.map((person) => (
+              <>
+                <label className="person-search-label">
+                  Search
+                  <input
+                    type="search"
+                    placeholder="Filter by name…"
+                    value={personSearch}
+                    onChange={(event) => setPersonSearch(event.target.value)}
+                  />
+                </label>
+                {(() => {
+                  const filtered = filterPeople(data.people, personSearch);
+                  if (filtered.length === 0) {
+                    return <p className="empty-state">No people match your search.</p>;
+                  }
+                  return (
+                    <ul className="people-list">
+                      {filtered.map((person) => (
                   <li key={person.id}>
                     <h4>{person.displayName}</h4>
                     <p>
@@ -438,17 +457,40 @@ export default function FamilyDashboard({
                     </button>
                     {expandedPersonId === person.id ? (
                       <div className="person-detail" style={{ marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid var(--border-color, #ddd)" }}>
-                        {data.stories.filter((s) => s.personId === person.id).length + data.media.filter((m) => m.personId === person.id).length === 0 ? (
-                          <p className="empty-state">No stories or media for this person yet.</p>
-                        ) : (
+                        {(() => {
+                          const personRelationships = data.relationships.filter(
+                            (r) => (r.sourcePersonId === person.id || r.targetPersonId === person.id) && !r.endedAt,
+                          );
+                          const personStories = data.stories.filter((s) => s.personId === person.id);
+                          const personMedia = data.media.filter((m) => m.personId === person.id);
+                          const hasAnything = personRelationships.length + personStories.length + personMedia.length > 0;
+                          if (!hasAnything) {
+                            return <p className="empty-state">No stories, media, or active bonds for this person yet.</p>;
+                          }
+                          return (
                           <>
-                            {data.stories.filter((s) => s.personId === person.id).map((story) => (
+                            {personRelationships.length > 0 ? (
+                              <div style={{ marginBottom: "0.75rem" }}>
+                                <p className="memory-kind">Active bonds</p>
+                                <ul style={{ margin: "0.25rem 0 0 1.25rem" }}>
+                                  {personRelationships.map((bond) => (
+                                    <li key={bond.id}>
+                                      {RELATIONSHIP_LABELS[bond.relationshipType ?? ""] ?? bond.relationshipType}
+                                      {" · "}
+                                      {personName(data.people, bond.sourcePersonId === person.id ? bond.targetPersonId : bond.sourcePersonId)}
+                                      {bond.evidenceMode === "oral" ? " (oral)" : ""}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {personStories.map((story) => (
                               <article key={story.id} style={{ marginBottom: "0.5rem" }}>
                                 <p className="memory-kind">Story</p>
                                 <p>{story.body}</p>
                               </article>
                             ))}
-                            {data.media.filter((m) => m.personId === person.id).map((item) => (
+                            {personMedia.map((item) => (
                               <article key={item.id} style={{ marginBottom: "0.5rem" }}>
                                 <p className="memory-kind">{item.kind === "voice_note" ? "Voice" : "Photo"}</p>
                                 <p>{item.caption || item.fileName || "Private media"}</p>
@@ -464,7 +506,8 @@ export default function FamilyDashboard({
                               </article>
                             ))}
                           </>
-                        )}
+                          );
+                        })()}
                       </div>
                     ) : null}
                     {data.access.managedPersonIds.includes(person.id) && editingPersonId !== person.id ? (
@@ -490,7 +533,10 @@ export default function FamilyDashboard({
                     ) : null}
                   </li>
                 ))}
-              </ul>
+                    </ul>
+                  );
+                })()}
+              </>
             )}
           </div>
         </div>

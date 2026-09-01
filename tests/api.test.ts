@@ -7,12 +7,16 @@ import { getApiActorFromRequest } from "../app/lib/identity";
 // header adapter explicitly and restore the environment afterwards.
 function withHeaderProvider<T>(fn: () => T): T {
   const prev = process.env.IDENTITY_PROVIDER;
+  const prevProxy = process.env.TRUSTED_IDENTITY_PROXY;
   process.env.IDENTITY_PROVIDER = "header";
+  process.env.TRUSTED_IDENTITY_PROXY = "1";
   try {
     return fn();
   } finally {
     if (prev === undefined) delete process.env.IDENTITY_PROVIDER;
     else process.env.IDENTITY_PROVIDER = prev;
+    if (prevProxy === undefined) delete process.env.TRUSTED_IDENTITY_PROXY;
+    else process.env.TRUSTED_IDENTITY_PROXY = prevProxy;
   }
 }
 

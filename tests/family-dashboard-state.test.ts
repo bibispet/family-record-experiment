@@ -12,6 +12,7 @@ import {
   withUpdatedRelationship,
   withRevokedShare,
   withUnlinkedRelationship,
+  filterPeople,
   type FamilyDashboardData,
   type FamilyPerson,
 } from "../app/family/family-dashboard-state";
@@ -188,3 +189,30 @@ test("withUpdatedRelationship updates type and evidence mode of the matching bon
   assert.equal(result.relationships.length, 1);
 });
 
+test("filterPeople returns all people when the query is empty", () => {
+  const people: FamilyPerson[] = [
+    { id: "p1", displayName: "Alice" },
+    { id: "p2", displayName: "Bob" },
+  ];
+  assert.deepEqual(filterPeople(people, ""), people);
+  assert.deepEqual(filterPeople(people, "   "), people);
+});
+
+test("filterPeople matches case-insensitively on displayName", () => {
+  const people: FamilyPerson[] = [
+    { id: "p1", displayName: "Alice" },
+    { id: "p2", displayName: "Bob" },
+    { id: "p3", displayName: "Charlotte" },
+  ];
+  const result = filterPeople(people, "ali");
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.id, "p1");
+});
+
+test("filterPeople returns empty array when nothing matches", () => {
+  const people: FamilyPerson[] = [
+    { id: "p1", displayName: "Alice" },
+  ];
+  const result = filterPeople(people, "Zara");
+  assert.equal(result.length, 0);
+});

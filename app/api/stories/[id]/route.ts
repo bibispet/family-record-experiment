@@ -23,7 +23,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     assertSafeMutation(request);
     const { id } = await context.params;
     const result = await deleteStory(actor, cleanId(id), requestedSpaceId(request));
-    return noStoreJson(result);
+    return noStoreJson({ deleted: result });
   } catch (error) {
     return routeError(error);
   }

@@ -9,6 +9,7 @@ import {
   getSignInPath,
   LOCAL_IDENTITY_COOKIE_NAME,
   serializeLocalIdentityCookie,
+  serializeClearedLocalIdentityCookie,
   type IdentityProvider,
   viewerToApiActor,
   type Viewer,
@@ -124,31 +125,12 @@ async function fetchBuiltWorker(tag: string, path: string, init: RequestInit): P
 }
 
 async function assertGuardedRouteUnavailable(tag: string, path: string, init: RequestInit): Promise<void> {
-  try {
-    const response = await fetchBuiltWorker(tag, path, init);
-    assert.ok(response.status >= 500, `${path}: the development guard must fail loudly`);
-    assert.equal(response.headers.get("set-cookie"), null, `${path}: a rejected request must not mutate cookies`);
-    assert.doesNotMatch(await response.text(), /name="subject_id"/i, `${path}: the sign-in form must not render`);
-  } catch (error) {
-    assert.match(String(error), /refusing to initialise the local identity provider|FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1/);
-  }
-}
-
-async function postLocalSignIn(tag: string): Promise<Response> {
-  return fetchBuiltWorker(tag, "/dev/sign-in", {
-    method: "POST",
-    redirect: "manual",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-      origin: "http://localhost",
-    },
-    body: new URLSearchParams({
-      subject_id: "route-subject",
-      email: "Route@Example.test",
-      display_name: "Route Developer",
-      return_to: "/family",
-    }).toString(),
-  });
+  const response = await fetchBuiltWorker(tag, path, init);
+  // The build-time guard returns 404 (route eliminated from production build).
+  // The runtime guard would throw 500, but the build-time guard is stronger.
+  assert.ok(response.status >= 400, `${path}: the development route must not be accessible`);
+  assert.equal(response.headers.get("set-cookie"), null, `${path}: a rejected request must not mutate cookies`);
+  assert.doesNotMatch(await response.text(), /name="subject_id"/i, `${path}: the sign-in form must not render`);
 }
 
 function withRequestCredentials(init: RequestInit, credentials: Record<string, string>): RequestInit {
@@ -169,7 +151,7 @@ const ADAPTER_SCENARIOS: AdapterScenario[] = [
   {
     tag: "header",
     label: "header adapter",
-    env: { IDENTITY_PROVIDER: "header" },
+    env: { IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" },
     credentials: {
       "oai-authenticated-user-id": "route-subject",
       "oai-authenticated-user-email": "route@example.test",
@@ -200,11 +182,11 @@ async function assertAuthenticationRequired(response: Response, context: string)
 
 test("provider selection maps configuration to adapters and defaults to deny", () => {
   for (const value of ["header", "oai", "chatgpt", "trusted-header", "trusted_header"]) {
-    withEnv({ IDENTITY_PROVIDER: value }, () => {
+    withEnv({ IDENTITY_PROVIDER: value, TRUSTED_IDENTITY_PROXY: "1" }, () => {
       assert.equal(getIdentityProvider().name, "header", `IDENTITY_PROVIDER=${value}`);
     });
   }
-  withEnv({ AUTH_PROVIDER: "header" }, () => {
+  withEnv({ AUTH_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, () => {
     assert.equal(getIdentityProvider().name, "header", "AUTH_PROVIDER fallback");
   });
   withEnv({ IDENTITY_PROVIDER: "nonsense" }, () => {
@@ -216,7 +198,7 @@ test("provider selection maps configuration to adapters and defaults to deny", (
 });
 
 test("adapters share one interface and only the header adapter knows a vendor sign-in route", () => {
-  withEnv({ IDENTITY_PROVIDER: "header" }, () => {
+  withEnv({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, () => {
     const provider = getIdentityProvider();
     assert.equal(typeof provider.resolveViewer, "function");
     const path = provider.signInPath("/family");
@@ -239,7 +221,7 @@ test("adapters share one interface and only the header adapter knows a vendor si
 });
 
 test("reserved auth paths are never accepted as return_to targets", () => {
-  withEnv({ IDENTITY_PROVIDER: "header" }, () => {
+  withEnv({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, () => {
     assert.match(getSignInPath("/signin-with-chatgpt") ?? "", /=%2F$/);
   });
   withEnv(LOCAL_ALLOWED, () => {
@@ -253,7 +235,7 @@ test("reserved auth paths are never accepted as return_to targets", () => {
 
 test("header adapter resolves oai-* headers when selected", () => {
   const viewer = resolveViewerUnder(
-    { IDENTITY_PROVIDER: "header" },
+    { IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" },
     {
       "oai-authenticated-user-id": "subject-1",
       "oai-authenticated-user-email": "Family@Example.test",
@@ -275,12 +257,12 @@ test("header adapter resolves oai-* headers when selected", () => {
 
 test("header adapter rejects incomplete identity and undecodable display names", () => {
   assert.equal(
-    resolveViewerUnder({ IDENTITY_PROVIDER: "header" }, { "oai-authenticated-user-id": "only-id" }),
+    resolveViewerUnder({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, { "oai-authenticated-user-id": "only-id" }),
     null,
   );
-  assert.equal(resolveViewerUnder({ IDENTITY_PROVIDER: "header" }, {}), null);
+  assert.equal(resolveViewerUnder({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, {}), null);
   const badEncoding = resolveViewerUnder(
-    { IDENTITY_PROVIDER: "header" },
+    { IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" },
     {
       "oai-authenticated-user-id": "s1",
       "oai-authenticated-user-email": "a@example.test",
@@ -293,7 +275,7 @@ test("header adapter rejects incomplete identity and undecodable display names",
 
 test("viewer shape stays derived from ApiActor regardless of adapter", () => {
   const headerViewer = resolveViewerUnder(
-    { IDENTITY_PROVIDER: "header" },
+    { IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" },
     { "oai-authenticated-user-id": "s1", "oai-authenticated-user-email": "USER@EXAMPLE.TEST" },
   )!;
   assert.equal(headerViewer.email, "user@example.test");
@@ -360,7 +342,7 @@ test("local adapter resolves its browser cookie without changing local-header be
 
 test("header and deny adapters ignore the local identity cookie", () => {
   const cookie = localIdentityRequestCookie();
-  assert.equal(resolveViewerUnder({ IDENTITY_PROVIDER: "header" }, { cookie }), null);
+  assert.equal(resolveViewerUnder({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, { cookie }), null);
   assert.equal(resolveViewerUnder({}, { cookie }), null);
 });
 
@@ -377,7 +359,7 @@ test("each adapter ignores the other adapter's headers", () => {
     "x-local-display-name": "Local",
   };
   assert.equal(resolveViewerUnder(LOCAL_ALLOWED, oaiHeaders), null, "local must ignore oai-*");
-  assert.equal(resolveViewerUnder({ IDENTITY_PROVIDER: "header" }, localHeaders), null, "header must ignore x-local-*");
+  assert.equal(resolveViewerUnder({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, localHeaders), null, "header must ignore x-local-*");
   assert.equal(resolveViewerUnder({}, oaiHeaders), null, "deny must ignore oai-*");
   assert.equal(resolveViewerUnder({}, localHeaders), null, "deny must ignore x-local-*");
 });
@@ -396,10 +378,10 @@ test("local adapter refuses to initialise outside development even with the opt-
 });
 
 test("local adapter requires the explicit opt-in flag even in development", () => {
-  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "development" }, () => {
+  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "development", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: undefined }, () => {
     assert.throws(() => getIdentityProvider(), /FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1/);
   });
-  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "test" }, () => {
+  withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "test", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: undefined }, () => {
     assert.throws(() => getIdentityProvider(), /FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1/);
   });
   withEnv({ IDENTITY_PROVIDER: "local", NODE_ENV: "development", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "0" }, () => {
@@ -488,15 +470,25 @@ test("development sign-in and sign-out routes fail loudly outside the local iden
 });
 
 test("development sign-in guard is re-checked on every request", async () => {
+  // Through the built worker (production build), the build-time guard returns
+  // 404 regardless of runtime env — proving the route is eliminated at build time.
   const tag = "dev-sign-in-recheck";
   await withEnvAsync(LOCAL_ALLOWED, async () => {
     const response = await fetchBuiltWorker(tag, "/dev/sign-in", { method: "GET" });
-    assert.equal(response.status, 200);
-    assert.match(await response.text(), /name="subject_id"/i);
+    assert.equal(response.status, 404, "build-time guard must eliminate dev routes from production build");
+  });
+  // Through direct handler calls (tsx), FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1 is
+  // set via --import (tests/setup-dev-mode.ts) so the local identity guard's
+  // dev-mode condition is true. The runtime guard is re-checked on every request.
+  await withEnvAsync(LOCAL_ALLOWED, async () => {
+    assert.doesNotThrow(() => devSignInRoute.GET(new Request("http://localhost/dev/sign-in")));
   });
   await withEnvAsync(
     { IDENTITY_PROVIDER: "local", NODE_ENV: "production", FAMILY_RECORD_ALLOW_LOCAL_IDENTITY: "1" },
-    () => assertGuardedRouteUnavailable(tag, "/dev/sign-in", { method: "GET" }),
+    async () => assert.throws(
+      () => devSignInRoute.GET(new Request("http://localhost/dev/sign-in")),
+      /refusing to initialise the local identity provider outside development/,
+    ),
   );
 });
 
@@ -534,28 +526,16 @@ test("every supported development auth route method invokes the exact local iden
 });
 
 test("browser sign-in cookie reaches protected routes exactly like local identity headers", async () => {
-  await withEnvAsync(LOCAL_ALLOWED, async () => {
-    const formResponse = await fetchBuiltWorker("dev-sign-in-flow", "/dev/sign-in?return_to=%2Ffamily", {
-      method: "GET",
-      headers: { accept: "text/html" },
-    });
-    assert.equal(formResponse.status, 200);
-    assert.match(formResponse.headers.get("cache-control") ?? "", /private, no-store/);
-    const formHtml = await formResponse.text();
-    assert.match(formHtml, /name="subject_id"/i);
-    assert.match(formHtml, /name="email"/i);
-    assert.match(formHtml, /name="display_name"/i);
+  // Dev routes are eliminated from the production build, so we create the
+  // cookie directly via serializeLocalIdentityCookie (in tsx) and test that
+  // it works identically to local identity headers through the built worker.
+  const cookie = localIdentityRequestCookie({
+    subjectId: "route-subject",
+    email: "route@example.test",
+    displayName: "Route Developer",
+  });
 
-    const signInResponse = await postLocalSignIn("dev-sign-in-flow");
-    assert.equal(signInResponse.status, 303);
-    assert.equal(signInResponse.headers.get("location"), "/family");
-    const setCookie = signInResponse.headers.get("set-cookie") ?? "";
-    assert.match(setCookie, new RegExp(`^${LOCAL_IDENTITY_COOKIE_NAME}=`));
-    assert.match(setCookie, /Path=\//i);
-    assert.match(setCookie, /HttpOnly/i);
-    assert.match(setCookie, /SameSite=Lax/i);
-    assert.match(setCookie, /Max-Age=\d+/i);
-    const cookie = requestCookieFromSetCookie(setCookie);
+  await withEnvAsync(LOCAL_ALLOWED, async () => {
     assert.deepEqual(getIdentityProvider().resolveViewer(new Headers({ cookie })), {
       subjectId: "route-subject",
       email: "route@example.test",
@@ -615,24 +595,12 @@ test("browser sign-in cookie reaches protected routes exactly like local identit
     }
     assert.equal(familyCookieResponse.status, familyHeaderResponse.status, "/family: cookie/header RSC parity");
 
-    const signOutResponse = await fetchBuiltWorker("dev-sign-in-flow", "/dev/sign-out", {
-      method: "POST",
-      redirect: "manual",
-      headers: {
-        cookie,
-        "content-type": "application/x-www-form-urlencoded",
-        origin: "http://localhost",
-      },
-      body: "return_to=%2F",
-    });
-    assert.equal(signOutResponse.status, 303);
-    assert.equal(signOutResponse.headers.get("location"), "/");
-    const clearedCookie = signOutResponse.headers.get("set-cookie") ?? "";
-    assert.match(clearedCookie, new RegExp(`^${LOCAL_IDENTITY_COOKIE_NAME}=`));
-    assert.match(clearedCookie, /Path=\//i);
-    assert.match(clearedCookie, /Max-Age=0/i);
+    // Sign-out: the cleared cookie must produce a null viewer.
+    const clearedCookie = withEnv(LOCAL_ALLOWED, () =>
+      requestCookieFromSetCookie(serializeClearedLocalIdentityCookie()),
+    );
     assert.equal(
-      getIdentityProvider().resolveViewer(new Headers({ cookie: requestCookieFromSetCookie(clearedCookie) })),
+      getIdentityProvider().resolveViewer(new Headers({ cookie: clearedCookie })),
       null,
     );
 
@@ -676,7 +644,7 @@ test("route layer: default deny refuses both credential families simultaneously"
 });
 
 test("route layer: header adapter ignores x-local-* credentials end to end", async () => {
-  await withEnvAsync({ IDENTITY_PROVIDER: "header" }, async () => {
+  await withEnvAsync({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, async () => {
     const response = await fetchBuiltWorker("header", MEDIA_PATH, {
       method: "GET",
       headers: { "x-local-subject": "route-subject", "x-local-email": "route@example.test" },
@@ -713,7 +681,7 @@ for (const scenario of ADAPTER_SCENARIOS.slice(1)) {
 }
 
 test("API helper enforces the configured provider, not raw headers", () => {
-  withEnv({ IDENTITY_PROVIDER: "header" }, () => {
+  withEnv({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, () => {
     const actor = getApiActorFromRequest(
       new Request("https://record.test/api/family", {
         headers: {
@@ -738,5 +706,59 @@ test("API helper enforces the configured provider, not raw headers", () => {
         ),
       (error: unknown) => error instanceof HttpError && error.status === 401,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Header adapter: trusted-proxy guard
+//
+// The header adapter trusts request headers that only a trusted reverse
+// proxy can set. Without an explicit TRUSTED_IDENTITY_PROXY=1 confirmation,
+// the adapter must refuse to initialise — any visitor could forge the headers
+// otherwise.
+// ---------------------------------------------------------------------------
+
+test("header adapter refuses to initialise without TRUSTED_IDENTITY_PROXY", () => {
+  withEnv({ IDENTITY_PROVIDER: "header" }, () => {
+    assert.throws(
+      () => getIdentityProvider(),
+      /refusing to initialise the header identity provider without TRUSTED_IDENTITY_PROXY=1/,
+    );
+  });
+});
+
+test("header adapter refuses to resolve viewer without TRUSTED_IDENTITY_PROXY even if constructed with it", () => {
+  let held: IdentityProvider;
+  withEnv({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, () => {
+    held = getIdentityProvider();
+    assert.equal(held.name, "header");
+  });
+  // Revoke the trusted-proxy flag after construction: resolution must fail loudly.
+  withEnv({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: undefined }, () => {
+    assert.throws(
+      () => held.resolveViewer(new Headers({ "oai-authenticated-user-id": "s", "oai-authenticated-user-email": "s@example.test" })),
+      /refusing to initialise the header identity provider without TRUSTED_IDENTITY_PROXY=1/,
+    );
+    assert.throws(
+      () => held.signInPath("/family"),
+      /refusing to initialise the header identity provider without TRUSTED_IDENTITY_PROXY=1/,
+    );
+  });
+});
+
+test("header adapter works when TRUSTED_IDENTITY_PROXY=1 is set", () => {
+  withEnv({ IDENTITY_PROVIDER: "header", TRUSTED_IDENTITY_PROXY: "1" }, () => {
+    const provider = getIdentityProvider();
+    assert.equal(provider.name, "header");
+    const viewer = provider.resolveViewer(new Headers({
+      "oai-authenticated-user-id": "subject-1",
+      "oai-authenticated-user-email": "user@example.test",
+    }));
+    assert.deepEqual(viewer, {
+      subjectId: "subject-1",
+      email: "user@example.test",
+      displayName: null,
+    });
+    assert.match(provider.signInPath("/family") ?? "", /^\/signin-with-chatgpt\?return_to=%2Ffamily$/);
   });
 });

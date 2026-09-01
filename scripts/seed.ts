@@ -1,0 +1,205 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { EXAMPLE_SEED_PLAN, seedFamily, seedIdentity, validateSeedPlan, type SeedResult } from "../db/seed";
+
+// This runner is deliberately local-only. It opens SQLite files with
+// node:sqlite; there is no wrangler/remote-D1 execution path and none will
+// be added. Keeping it unable to reach a deployed database is a feature.
+
+const REPO_ROOT = process.cwd();
+const MIGRATION_PATH = join(REPO_ROOT, "drizzle", "0000_romantic_agent_zero.sql");
+const LOCAL_STATE_ROOT = resolve(REPO_ROOT, ".wrangler");
+
+/** Mirrors db/runtime.ts so a fresh local D1 gets the checked-in schema. */
+function applyIdempotentMigration(database: DatabaseSync): void {
+  const existing = database
+    .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'index' AND name = 'users_auth_subject_uq'")
+    .get();
+  if (existing) return;
+
+  const sql = readFileSync(MIGRATION_PATH, "utf8");
+  for (const rawStatement of sql.split("--> statement-breakpoint")) {
+    const statement = rawStatement.trim();
+    if (!statement) continue;
+    const idempotent = statement
+      .replace(/^CREATE TABLE\s+/i, "CREATE TABLE IF NOT EXISTS ")
+      .replace(/^CREATE UNIQUE INDEX\s+/i, "CREATE UNIQUE INDEX IF NOT EXISTS ")
+      .replace(/^CREATE INDEX\s+/i, "CREATE INDEX IF NOT EXISTS ");
+    database.exec(idempotent);
+  }
+}
+
+/**
+ * Minimal D1 adapter over node:sqlite. D1's prepare/bind/run shape maps to
+ * DatabaseSync's prepare/run; batch runs statements in a single transaction.
+ */
+function d1Adapter(database: DatabaseSync): D1Database {
+  const prepare = (sql: string): D1PreparedStatement => {
+    const statement = database.prepare(sql);
+    return {
+      bind(...values: unknown[]): D1PreparedStatement {
+        const params: SQLInputValue[] = values.map((value) => {
+          if (value === undefined || value === null) return null;
+          if (typeof value === "string" || typeof value === "number" || typeof value === "bigint") return value;
+          throw new Error(`seed: adapter cannot bind value of type ${typeof value}`);
+        });
+        return {
+          bind: () => {
+            throw new Error("seed: double bind is not supported by the adapter");
+          },
+          run: async () => {
+            statement.run(...params);
+            return { success: true, meta: {}, results: [] };
+          },
+          first: async () => statement.get(...params),
+          all: async () => ({ success: true, meta: {}, results: statement.all(...params) ?? [] }),
+        } as unknown as D1PreparedStatement;
+      },
+      run: async () => {
+        statement.run();
+        return { success: true, meta: {}, results: [] };
+      },
+      first: async () => statement.get(),
+      all: async () => ({ success: true, meta: {}, results: statement.all() ?? [] }),
+    } as unknown as D1PreparedStatement;
+  };
+
+  return {
+    prepare,
+    batch: async (statements: D1PreparedStatement[]) => {
+      database.exec("BEGIN");
+      try {
+        for (const statement of statements) {
+          await statement.run();
+        }
+        database.exec("COMMIT");
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+      return statements.map(() => ({ success: true, meta: {}, results: [] }));
+    },
+  } as unknown as D1Database;
+}
+
+/** Locate the Miniflare local D1 sqlite file the dev server uses. */
+function findLocalD1(): string {
+  const stateDir = join(LOCAL_STATE_ROOT, "state", "v3", "d1", "miniflare-D1DatabaseObject");
+  let files: string[];
+  try {
+    files = readdirSync(stateDir).filter((name) => name.endsWith(".sqlite") && !name.includes("metadata"));
+  } catch {
+    files = [];
+  }
+  if (files.length === 0) {
+    throw new Error(
+      "seed: no local D1 database found. Start the dev server once (npm run dev) so .wrangler state exists, then run this again.",
+    );
+  }
+  if (files.length > 1) {
+    throw new Error(`seed: ambiguous local D1 state (found ${files.length} sqlite files). Refusing to guess.`);
+  }
+  return join(stateDir, files[0]);
+}
+
+/** Refuse any target that is not a real file under the local .wrangler dir. */
+function assertLocalTarget(d1Path: string, force: boolean): void {
+  if (!resolve(d1Path).startsWith(LOCAL_STATE_ROOT + sep)) {
+    if (!force) {
+      throw new Error(
+        `seed: refusing target outside the local .wrangler state dir (${d1Path}). This tool is local-only by design; pass --force to use an arbitrary sqlite file for throwaway experiments.`,
+      );
+    }
+    return;
+  }
+  if (!statSync(d1Path, { throwIfNoEntry: false })?.isFile()) {
+    throw new Error(`seed: target is not a file: ${d1Path}`);
+  }
+}
+
+function countLabel(result: SeedResult): string {
+  return `${result.people} people, ${result.relationships} relationships, ${result.stories} stories, ${result.media} media`;
+}
+
+type PurgeCounts = Record<string, number>;
+
+/** Delete every example row for the seed identity, children before parents. */
+function purgeSeed(database: DatabaseSync, d1Path: string): PurgeCounts {
+  const identity = seedIdentity(EXAMPLE_SEED_PLAN);
+  const spaceId = identity.spaceId;
+  const tables = ["media_assets", "relationships", "stories", "person_authorities", "people", "space_memberships"];
+  const counts: PurgeCounts = {};
+  database.exec("BEGIN");
+  try {
+    for (const table of tables) {
+      const result = database.prepare(`DELETE FROM ${table} WHERE space_id = ?`).run(spaceId);
+      counts[table] = Number(result.changes);
+    }
+    const spaceResult = database.prepare("DELETE FROM family_spaces WHERE id = ?").run(spaceId);
+    counts.family_spaces = Number(spaceResult.changes);
+    const userResult = database.prepare("DELETE FROM users WHERE id = ?").run(identity.stewardUserId);
+    counts.users = Number(userResult.changes);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+  console.log(`Purged seed data from ${d1Path}: ${JSON.stringify(counts)}.`);
+  console.log(`Seed identity (space ${identity.spaceId}, user ${identity.stewardUserId}) is now reusable.`);
+  return counts;
+}
+
+async function main(): Promise<void> {
+  validateSeedPlan(EXAMPLE_SEED_PLAN);
+  const force = process.argv.includes("--force");
+  const purge = process.argv.includes("--purge");
+  const explicit = process.argv.find((arg) => arg.startsWith("--db="));
+  const d1Path = explicit ? explicit.slice("--db=".length) : findLocalD1();
+
+  if (purge) {
+    assertLocalTarget(d1Path, force);
+    const database = new DatabaseSync(d1Path);
+    applyIdempotentMigration(database);
+    purgeSeed(database, d1Path);
+    database.close();
+    return;
+  }
+
+  assertLocalTarget(d1Path, force);
+  const database = new DatabaseSync(d1Path);
+  applyIdempotentMigration(database);
+
+  const identity = seedIdentity(EXAMPLE_SEED_PLAN);
+  const reusedSpace = database
+    .prepare("SELECT id FROM family_spaces WHERE id = ?")
+    .get(identity.spaceId) as { id: string } | undefined;
+  if (reusedSpace) {
+    database.close();
+    throw new Error(
+      "seed: the example family already exists in this database (deterministic seed space id). " +
+        "Run `npm run db:seed -- --purge` to remove it first.",
+    );
+  }
+
+  const existingPeople = database.prepare("SELECT COUNT(*) AS n FROM people").get() as { n: number };
+  if (existingPeople.n > 0 && !force) {
+    database.close();
+    throw new Error(
+      `seed: the local D1 already has ${existingPeople.n} people. Refusing to overwrite; run \`npm run db:seed -- --purge\` to clear the example family, or pass --force for a throwaway database.`,
+    );
+  }
+
+  const result = await seedFamily(d1Adapter(database), identity.spaceId, identity.stewardUserId, EXAMPLE_SEED_PLAN);
+  database.close();
+  console.log(`Seeded "${EXAMPLE_SEED_PLAN.spaceName}" into local D1 (${d1Path}).`);
+  console.log(`Seed identity: space ${identity.spaceId}, user ${identity.stewardUserId}.`);
+  console.log(`Inserted ${countLabel(result)}.`);
+  console.log(`Sign in at /dev/sign-in with subject "${EXAMPLE_SEED_PLAN.stewardSubject}" and email "${EXAMPLE_SEED_PLAN.stewardEmail}" to browse it.`);
+  console.log("Remove it any time with: npm run db:seed -- --purge");
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
