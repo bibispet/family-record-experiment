@@ -1,4 +1,4 @@
-# Lore (frx) — Standing Agent Brief · v3.6
+# Lore (frx) — Standing Agent Brief · v3.7
 
 Drop this in the repo root. Copy or symlink it to whatever your current tool reads
 (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`).
@@ -428,11 +428,24 @@ paragraph and propose the swap. Don't silently reorder it.
 ## 6. Definition of done
 
 
-A change is done when: it runs on a clean clone · the identity path is unchanged
-or deliberately and visibly changed · migrations apply forward cleanly · nothing
-new is logged that shouldn't be · `DECISIONS.md` reflects any real choice · and
-you can state in one sentence what a family member can now do that they couldn't
-before.
+A change is done when: it runs on a clean clone · **typecheck and lint pass, not
+just tests** · the identity path is unchanged or deliberately and visibly
+changed · migrations apply forward cleanly · nothing new is logged that
+shouldn't be · `DECISIONS.md` reflects any real choice · and you can state in one
+sentence what a family member can now do that they couldn't before.
+
+
+"Green" means all three gates. A branch sat at 109/109 tests while typecheck had
+five errors and lint one, because `npm test` runs neither — so wire typecheck and
+lint into `npm test` (or into CI on every push) and stop reporting a suite result
+as if it were a verdict on the branch.
+
+
+**Deleting code in the auth or identity path is its own commit**, never folded in
+with mechanical fixes, and it ships with the evidence: the helper's body and a
+grep showing zero references. A type annotation and a deletion in the sign-in
+flow do not belong in the same reviewable unit even when the same lint run
+surfaced both.
 
 
 ---
@@ -540,6 +553,16 @@ the wip rescue push, commit them properly onto `hardening/rung2-dev-routes`.
 should be `FAMILY_RECORD_ALLOW_LOCAL_IDENTITY=1`. (The `DEV_MODE` mentions in
 `setup-dev-mode.ts:10` and the sign-in route comment are explanatory and
 correct — leave them.)
+
+
+**OPEN · P1 — typecheck and lint on `hardening/rung2-dev-routes`.**
+Five typecheck errors and one lint error, absent from the `dev-signin-a` base —
+expected fallout from rescuing unfinished work verbatim, not a mystery
+regression. Fix on the branch, in two commits: (a) mechanical —
+`/// <reference types="vite/client" />` on the three dev routes and the
+`withEnvAsync` callback typings, no runtime change; (b) the `postLocalSignIn`
+deletion, alone, with the helper's body and a zero-reference grep in the commit
+message. Then wire typecheck and lint into `npm test`.
 
 
 **OPEN · P2 — confirm the elimination test has no symbol-name assertions.**
