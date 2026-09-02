@@ -200,3 +200,37 @@
   merge. If you need to keep any post-merge DECISIONS.md entries, cherry-pick
   them forward after reverting; they are documentation, not code.
 
+
+## 2026-09-02 — Standing brief re-landed at v3.8; Section 8 reconciled with evidence
+
+- Decision: re-land the standing brief from the canonical WSL clone as
+  `LORE-AGENT-BRIEF.md` v3.8 (Section 8 P0), on branch
+  `docs/lore-agent-brief-v38` off `main` (which descends from the
+  `dev-signin-a` merge chain). Added the reader pointer line
+  "Read LORE-AGENT-BRIEF.md first, then its Section 8." to `AGENTS.md` and a
+  `CLAUDE.md` containing only that pointer. `docs/lore-agent-brief`
+  (`83a03e0`, v3.1) and `docs/lore-agent-brief-v36` (`6934300`, v3.7 draft)
+  left on origin as harmless archives; neither merged.
+- Branch: `docs/lore-agent-brief-v38`, commit `86e624e`, pushed to
+  `origin/docs/lore-agent-brief-v38`.
+- Section 8 reconciliation rule: every item moved to CLOSED carries its
+  evidence inline (commit SHA, archive ref, or command output) so the section
+  cannot drift silently out of sync with the repo. Items verified closed:
+  blocker-fixes merge (`6fbccb0` ancestor of `main`), last-two archives
+  (`archive/win-onedrive-stash-6ad838e`, `archive/win-onedrive-pkg-changes`),
+  two blocker-fix commits (`a83d555`, `c183f47`), stale-comment fix
+  (`ff7e522`), typecheck/lint fixes (`ccde57e`, `e363828`, `f6bd83d`),
+  elimination-test symbol-assertion check, DECISIONS local-adapter entry
+  (`910e144`), and the `dev-signin-a → main` merge (`0567a12`, `--no-ff`,
+  revert handle recorded above).
+- Still OPEN at v3.8, verified against the working tree: the purge dry-run
+  (`scripts/seed.ts --purge` at line 160 runs immediately, no
+  print-counts-then-confirm step) and restoration of integration coverage for
+  the local sign-in flow (the cookie is still built in-process via
+  `serializeLocalIdentityCookie`; no test has driven a live `/dev/sign-in`
+  POST and followed the Set-Cookie through).
+- OneDrive reader: per owner directive, the OneDrive working tree (cloud-
+  synced; disqualified as a working copy) must never receive a copy of the
+  standing text. Its `AGENTS.md` was replaced with a pointer line naming the
+  canonical clone path and file only.
+
