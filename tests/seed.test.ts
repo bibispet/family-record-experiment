@@ -24,7 +24,7 @@ test("runtime and seed setup enable foreign keys before checking an existing sch
     },
     {
       name: "local seed runner",
-      source: readFileSync(new URL("../scripts/seed.ts", import.meta.url), "utf8"),
+      source: readFileSync(new URL("../db/node-sqlite-d1.ts", import.meta.url), "utf8"),
       entryPoint: "function applyIdempotentMigration",
       pragmaStatement: 'database.exec("PRAGMA foreign_keys = ON");',
     },
