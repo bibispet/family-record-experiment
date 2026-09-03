@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   EXAMPLE_SEED_PLAN,
@@ -10,6 +11,34 @@ import {
 } from "../db/seed";
 
 type BoundStatement = { sql: string; params: unknown[] };
+
+test("runtime and seed setup enable foreign keys before checking an existing schema", () => {
+  const cases = [
+    {
+      name: "D1 runtime",
+      source: readFileSync(new URL("../db/runtime.ts", import.meta.url), "utf8"),
+      entryPoint: "async function initialize",
+      pragmaStatement: 'await database.prepare("PRAGMA foreign_keys = ON").run();',
+    },
+    {
+      name: "local seed runner",
+      source: readFileSync(new URL("../scripts/seed.ts", import.meta.url), "utf8"),
+      entryPoint: "function applyIdempotentMigration",
+      pragmaStatement: 'database.exec("PRAGMA foreign_keys = ON");',
+    },
+  ];
+
+  for (const { name, source, entryPoint, pragmaStatement } of cases) {
+    const entryPointIndex = source.indexOf(entryPoint);
+    const pragmaIndex = source.indexOf(pragmaStatement, entryPointIndex);
+    const existingSchemaCheckIndex = source.indexOf("users_auth_subject_uq", entryPointIndex);
+
+    assert.notEqual(entryPointIndex, -1, `${name}: setup entry point is missing`);
+    assert.notEqual(pragmaIndex, -1, `${name}: foreign-key enforcement is missing`);
+    assert.notEqual(existingSchemaCheckIndex, -1, `${name}: existing-schema check is missing`);
+    assert.ok(pragmaIndex < existingSchemaCheckIndex, `${name}: foreign keys must be enabled before the early return`);
+  }
+});
 
 /** D1 recorder: captures the exact bound rows so the test can assert shapes. */
 function fakeD1(): { database: D1Database; records: BoundStatement[] } {

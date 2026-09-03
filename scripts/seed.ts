@@ -13,6 +13,8 @@ const LOCAL_STATE_ROOT = resolve(REPO_ROOT, ".wrangler");
 
 /** Mirrors db/runtime.ts so a fresh local D1 gets the checked-in schema. */
 function applyIdempotentMigration(database: DatabaseSync): void {
+  database.exec("PRAGMA foreign_keys = ON");
+
   const existing = database
     .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'index' AND name = 'users_auth_subject_uq'")
     .get();

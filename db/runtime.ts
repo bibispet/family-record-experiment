@@ -62,6 +62,8 @@ export async function reconcileStaleMedia(database: D1Database, media: R2Bucket)
 }
 
 async function initialize(database: D1Database) {
+  await database.prepare("PRAGMA foreign_keys = ON").run();
+
   const existing = await database.prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'index' AND name = 'users_auth_subject_uq'").first();
   if (existing) return;
 
