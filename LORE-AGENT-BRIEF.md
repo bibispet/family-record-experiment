@@ -491,6 +491,44 @@ item by editing this section in the same commit that closes it — never by
 saying it's done.
 
 
+**OPEN · P1 — return 503 for a misconfigured trusted-proxy provider.**
+`assertTrustedProxyConfigured` throws a plain `Error`; API `routeError` turns
+that deployment fault into a generic 500, while RSC callers have no equivalent
+translation. Keep the fail-closed identity behavior, but distinguish an
+unavailable/misconfigured authentication service with a deliberate 503 and
+cover both API and page paths.
+
+
+**OPEN · P1 — make anonymous `/family` fail with an intentional 401.**
+With the deny provider there is no sign-in destination, so `requireRscViewer`
+throws `HttpError` from a server component without a page-level response
+boundary. Add an explicit 401 response path and a rendered/default-deny status
+test; do not turn the absence of an identity provider into a redirect guess.
+
+
+**OPEN · P1 — reject oversized uploads before multipart buffering.**
+`app/api/people/[id]/media/route.ts` awaits `request.formData()` before
+`validateMedia` can inspect `File.size`. The nominal 10/25 MB limits therefore
+run only after the multipart body has been materialized. Add a bounded
+pre-buffer/streaming check and retain the decoded-file check as defense in
+depth.
+
+
+**OPEN · P1 — stop the orphan-blob sweeper from jamming.**
+`reconcileStaleMedia` selects the oldest 12 pending/failed rows, deletes their
+R2 keys, but leaves successful failed-row cleanup eligible for the next scan.
+Those same rows can monopolize every batch and prevent later orphan candidates
+from ever being reached. Give each successful cleanup a terminal database
+state or otherwise guarantee forward progress.
+
+
+**OPEN · P1 — implement export and durability (rung 6).**
+There is currently zero export code: no route or command produces structured
+data, original media, and a self-describing manifest. Do not treat the archive
+as durable until a family can take a complete open-format copy away from this
+codebase.
+
+
 **OPEN · P2 — restore integration coverage for the local sign-in flow.**
 The cookie test now builds its cookie in-process, so no test exercises sign-in
 through the worker. Cover it in a dev-mode harness. (Still open at v3.8: the
@@ -500,17 +538,19 @@ driven an actual `/dev/sign-in` POST against a live dev server and followed the
 Set-Cookie through.)
 
 
-**OPEN · P2 — add the purge dry-run.**
-Per rung 3: counts printed, second flag required to delete. (Still open at
-v3.8: `scripts/seed.ts --purge` at line 160 runs immediately; no dry-run that
-prints per-table counts and then requires a second explicit flag.)
+**CLOSED — P0 · enable SQLite foreign-key enforcement explicitly.**
+Shipped as `103a997`. Both `db/runtime.ts` and `scripts/seed.ts` now execute
+`PRAGMA foreign_keys = ON` before the existing-schema early return, and the
+ordering is covered by a regression test. Composite cross-space foreign keys
+no longer rely on a runtime default.
 
 
-**OPEN · P1 — implement export and durability (rung 6).**
-There is currently zero export code: no route or command produces structured
-data, original media, and a self-describing manifest. Do not treat the archive
-as durable until a family can take a complete open-format copy away from this
-codebase.
+**CLOSED — P1 · make seed purge provenance-safe and dry-run-first.**
+Shipped atomically as `57ce454`. Seed-created rows now have exact deterministic
+provenance IDs; the purge covers every table in child-first foreign-key order,
+counts only those marked rows, and prints per-table counts without deleting by
+default. Deletion requires the additional `--execute` flag and runs in one
+transaction, so unmarked family content makes it fail closed and roll back.
 
 
 **CLOSED — P0 · re-land this brief from the canonical clone.**
