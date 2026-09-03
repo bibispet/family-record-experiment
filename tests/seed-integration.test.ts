@@ -3,7 +3,9 @@
 // Integration harness that drives family-store.ts through the actual route
 // handlers against a real node:sqlite database seeded with the checked-in
 // 0000 migration. This catches the class of defects where:
-//   - authz.ts / custodianship.ts are dead code (imported only by tests)
+//   - the old in-memory authz.ts silently drifted from, and was not wired to,
+//     the SQL enforcement surface; it is deleted and its scenarios live here
+//   - custodianship.ts is deliberately retained as unwired domain policy
 //   - SQL enforcement in family-store.ts has zero test coverage
 //   - audit() is never exercised (deleting every call keeps the suite green)
 //

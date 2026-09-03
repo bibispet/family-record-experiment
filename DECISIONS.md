@@ -234,3 +234,34 @@
   standing text. Its `AGENTS.md` was replaced with a pointer line naming the
   canonical clone path and file only.
 
+## 2026-09-03 — authz.ts deleted; its scenarios live in the SQL path
+Delegated to the integration harness (`tests/seed-integration.test.ts`), which
+drives `family-store.ts` through the real routes against a live
+`node:sqlite` database. The old `app/lib/authz.ts` was never wired to a
+runtime path and had drifted from the actual SQL enforcement surface. Its
+scenarios (deny-by-default participant, steward create-without-read-bypass,
+effective-dated `person_authorities`, custodianship verification/effective
+states, verified-account-claim neutrality, share scoping with graph-edge
+filtering, relationship creation requiring manage over both endpoints) were
+ported and committed (`f0fb5d1`) before the file was removed.
+
+- Branch: `test/integration-harness`, commits `16f21cd` (harness) then
+  `f0fb5d1` (ports), pushed to `origin/test/integration-harness`.
+- `app/lib/authz.ts` + `app/lib/authz.test.ts` deleted in their own commit so
+  the removal reverts alone.
+- `app/lib/custodianship.ts` is deliberately RETAINED as unwired domain policy
+  — it is the only home for the pure policy rules (leap-day majority, 18th
+  birthday, civil-state evaluation) and is covered by
+  `tests/custodianship.test.ts`. `family-store.ts` reads the `custodianships`
+  TABLE via SQL; it never imports the module.
+
+### Section-8 style decision — custodianship expiry enforcement
+Status: OPEN. Decide whether custodianship expiry (`valid_until` passing) is
+enforced automatically by the SQL layer (as `person_authorities.ends_at` and
+`share_grants.revoked_at` already are, via `valid_until IS NULL OR
+valid_until > ?` predicates) or is deliberately manual (a steward must
+explicitly end it). Today the SQL treats an expired custodianship as no longer
+granting access automatically — but no scheduled/batch job surfaces "this
+custodianship just expired" to a steward, so the removal is silent. Record the
+chosen behavior and the stewardship UX before wiring custodianship.ts.
+

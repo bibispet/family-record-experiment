@@ -11,7 +11,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "npm run typecheck && npm run lint && npm run build && npm run test:unit && npm run test:integration && npm run test:render && npm run test:build && npm run test:smoke",
-    "test:unit": "tsx --import ./tests/setup-dev-mode.ts --test tests/api.test.ts tests/authz.test.ts tests/custodianship.test.ts tests/family-dashboard-state.test.ts tests/identity.test.ts tests/media-validation.test.ts tests/seed.test.ts",
+    "test:unit": "tsx --import ./tests/setup-dev-mode.ts --test tests/api.test.ts tests/custodianship.test.ts tests/family-dashboard-state.test.ts tests/identity.test.ts tests/media-validation.test.ts tests/seed.test.ts",
     "test:integration": "tsx --import ./tests/cf-bindings-setup.mjs --test tests/seed-integration.test.ts",
     "test:render": "node --test tests/rendered-html.test.mjs",
     "test:build": "node --test tests/build-elimination.test.mjs",
