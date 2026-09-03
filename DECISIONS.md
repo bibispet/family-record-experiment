@@ -265,3 +265,24 @@ granting access automatically — but no scheduled/batch job surfaces "this
 custodianship just expired" to a steward, so the removal is silent. Record the
 chosen behavior and the stewardship UX before wiring custodianship.ts.
 
+## 2026-09-03 — integration harness merged into main; revert handle recorded
+
+- `test/integration-harness` merged into `main` with `--no-ff` so the whole
+  harness + authz port + authz deletion is a single, individually reverrible
+  unit. Both parents were green and the merged result was re-verified
+  (typecheck + lint + the full test suite — unit 79, integration 27, render 19,
+  build-elimination 4) on the merge commit itself before it was pushed.
+- Merge commit: `f902c16`
+- revert handle: `git revert -m 1 f902c16`
+- Conflict note: `scripts/seed.ts` conflicted because `main` added the
+  provenance-safe purge (`57ce454`) while the harness factored the node:sqlite
+  D1 adapter into `db/node-sqlite-d1.ts`. Resolved by keeping `main`'s
+  provenance-safe purge and importing the shared adapter, and by pointing the
+  seed-runner structural test at the shared module (`tests/seed.test.ts`).
+- `LORE.md` (untracked stale v3.1 copy) was diffsed against the tracked
+  `LORE-AGENT-BRIEF.md` (v3.8): it held no unique content and was deleted.
+
+- Notes for a revert: use `--no-edit` and default to reverting the whole
+  merge. If you need to keep any post-merge DECISIONS.md entries, cherry-pick
+  them forward after reverting; they are documentation, not code.
+
