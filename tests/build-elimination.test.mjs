@@ -62,9 +62,11 @@ function readAllJs() {
 
 // ---------------------------------------------------------------------------
 // PRIMARY PROOF (behavioural, mangling-proof): the built worker returns 404
-// for /dev/sign-in and /dev/sign-out. This is the strongest assertion — it
-// proves the routes are stubs at the HTTP level, regardless of what symbols
-// or strings survive in the bundle.
+// for every development-only route /dev/sign-in, /dev/sign-out and /preview,
+// for every HTTP method each exports. This is the strongest assertion — it
+// proves the routes are stubs at the HTTP level with an exact 404, not a
+// looser >= 400 that a partially-surviving handler could satisfy, regardless
+// of what symbols or strings survive in the bundle.
 // ---------------------------------------------------------------------------
 test("built worker returns 404 for dev routes (primary proof — behavioural, mangling-proof)", async () => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -73,17 +75,26 @@ test("built worker returns 404 for dev routes (primary proof — behavioural, ma
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   };
   const env = { waitUntil() {}, passThroughOnException() {} };
-  for (const path of ["/dev/sign-in", "/dev/sign-out"]) {
-    const response = await worker.fetch(
-      new Request(`http://localhost${path}`, { method: "GET" }),
-      ctx,
-      env,
-    );
-    assert.equal(
-      response.status,
-      404,
-      `${path} must return 404 in the production build — got ${response.status}`,
-    );
+
+  const DEV_ROUTES = {
+    "/dev/sign-in": ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
+    "/dev/sign-out": ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
+    "/preview": ["GET"],
+  };
+
+  for (const [path, methods] of Object.entries(DEV_ROUTES)) {
+    for (const method of methods) {
+      const response = await worker.fetch(
+        new Request(`http://localhost${path}`, { method }),
+        ctx,
+        env,
+      );
+      assert.equal(
+        response.status,
+        404,
+        `${method} ${path} must return exactly 404 in the production build — got ${response.status}`,
+      );
+    }
   }
 });
 

@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtempSync } from "node:fs";
+import Module from "node:module";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 import * as devSignInRoute from "../app/dev/sign-in/route";
 import * as devSignOutRoute from "../app/dev/sign-out/route";
 import { HttpError } from "../app/lib/api";
@@ -14,6 +20,7 @@ import {
   viewerToApiActor,
   type Viewer,
 } from "../app/lib/identity";
+import { applyIdempotentMigration, d1Adapter } from "../db/node-sqlite-d1";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,10 +126,47 @@ async function fetchBuiltWorker(tag: string, path: string, init: RequestInit): P
     new Request(`http://localhost${path}`, init),
     {
       ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+      DB: testDb,
+      MEDIA: testMedia,
     },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
+
+// Real SQLite-backed DB + R2-shaped MEDIA so that a request that passes the
+// identity gate reaches an actual route handler (and can return its real
+// status/body) instead of crashing with a missing-binding 500. Denied requests
+// are rejected by the identity layer before any binding is touched, so these
+// fixtures do not weaken the 401 assertions elsewhere in this file.
+function makeTestEntities(): { db: D1Database; media: R2Bucket } {
+  const dir = mkdtempSync(join(tmpdir(), "family-record-identity-"));
+  const sqlite = new DatabaseSync(join(dir, "test.db"));
+  applyIdempotentMigration(sqlite);
+  const media = {
+    get: async (key: string) => {
+      void key;
+      return null;
+    },
+    head: async (key: string) => {
+      void key;
+      return null;
+    },
+    put: async () => undefined,
+    delete: async () => undefined,
+  } as unknown as R2Bucket;
+  return { db: d1Adapter(sqlite), media };
+}
+
+const { db: testDb, media: testMedia } = makeTestEntities();
+
+// Register the same cloudflare:workers / ?raw SQL resolver hook the
+// integration harness uses, and publish the real SQLite+R2 fixtures under the
+// global it reads. This makes the BUILT worker's `cloudflare:workers` `env`
+// resolve to a live DB, so requests that pass the identity gate run a real
+// route handler and return their real status instead of a missing-binding 500.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+Module.register(pathToFileURL(join(__dirname, "cf-bindings-hooks.mjs")).href, import.meta.url);
+(globalThis as Record<string, unknown>).__cfTestBindings = { DB: testDb, MEDIA: testMedia };
 
 async function assertGuardedRouteUnavailable(tag: string, path: string, init: RequestInit): Promise<void> {
   const response = await fetchBuiltWorker(tag, path, init);
@@ -674,8 +718,12 @@ for (const scenario of ADAPTER_SCENARIOS.slice(1)) {
         headers: scenario.credentials,
       });
       const body = (await response.json()) as { code?: string };
-      assert.notEqual(response.status, 401, "authenticated request must move past the identity gate");
-      assert.notEqual(body.code, "authentication_required");
+      // A request with valid credentials must move past the identity gate and
+      // reach a real route handler backed by SQLite+R2. Getting an exact
+      // "Media not found." 404 (not a 401, and not a 500 from a missing
+      // binding) proves the gate passed and the application actually ran.
+      assert.equal(response.status, 404, "authenticated request must reach the media route (404 not-found), not 401/500");
+      assert.equal(body.code, "not_found", "expected a real application-level not_found after passing the identity gate");
     });
   });
 }

@@ -1,87 +1,15 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { EXAMPLE_SEED_PLAN, seedFamily, seedIdentity, validateSeedPlan, type SeedResult } from "../db/seed";
+import { applyIdempotentMigration, d1Adapter } from "../db/node-sqlite-d1";
 
 // This runner is deliberately local-only. It opens SQLite files with
 // node:sqlite; there is no wrangler/remote-D1 execution path and none will
 // be added. Keeping it unable to reach a deployed database is a feature.
 
 const REPO_ROOT = process.cwd();
-const MIGRATION_PATH = join(REPO_ROOT, "drizzle", "0000_romantic_agent_zero.sql");
 const LOCAL_STATE_ROOT = resolve(REPO_ROOT, ".wrangler");
-
-/** Mirrors db/runtime.ts so a fresh local D1 gets the checked-in schema. */
-function applyIdempotentMigration(database: DatabaseSync): void {
-  const existing = database
-    .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'index' AND name = 'users_auth_subject_uq'")
-    .get();
-  if (existing) return;
-
-  const sql = readFileSync(MIGRATION_PATH, "utf8");
-  for (const rawStatement of sql.split("--> statement-breakpoint")) {
-    const statement = rawStatement.trim();
-    if (!statement) continue;
-    const idempotent = statement
-      .replace(/^CREATE TABLE\s+/i, "CREATE TABLE IF NOT EXISTS ")
-      .replace(/^CREATE UNIQUE INDEX\s+/i, "CREATE UNIQUE INDEX IF NOT EXISTS ")
-      .replace(/^CREATE INDEX\s+/i, "CREATE INDEX IF NOT EXISTS ");
-    database.exec(idempotent);
-  }
-}
-
-/**
- * Minimal D1 adapter over node:sqlite. D1's prepare/bind/run shape maps to
- * DatabaseSync's prepare/run; batch runs statements in a single transaction.
- */
-function d1Adapter(database: DatabaseSync): D1Database {
-  const prepare = (sql: string): D1PreparedStatement => {
-    const statement = database.prepare(sql);
-    return {
-      bind(...values: unknown[]): D1PreparedStatement {
-        const params: SQLInputValue[] = values.map((value) => {
-          if (value === undefined || value === null) return null;
-          if (typeof value === "string" || typeof value === "number" || typeof value === "bigint") return value;
-          throw new Error(`seed: adapter cannot bind value of type ${typeof value}`);
-        });
-        return {
-          bind: () => {
-            throw new Error("seed: double bind is not supported by the adapter");
-          },
-          run: async () => {
-            statement.run(...params);
-            return { success: true, meta: {}, results: [] };
-          },
-          first: async () => statement.get(...params),
-          all: async () => ({ success: true, meta: {}, results: statement.all(...params) ?? [] }),
-        } as unknown as D1PreparedStatement;
-      },
-      run: async () => {
-        statement.run();
-        return { success: true, meta: {}, results: [] };
-      },
-      first: async () => statement.get(),
-      all: async () => ({ success: true, meta: {}, results: statement.all() ?? [] }),
-    } as unknown as D1PreparedStatement;
-  };
-
-  return {
-    prepare,
-    batch: async (statements: D1PreparedStatement[]) => {
-      database.exec("BEGIN");
-      try {
-        for (const statement of statements) {
-          await statement.run();
-        }
-        database.exec("COMMIT");
-      } catch (error) {
-        database.exec("ROLLBACK");
-        throw error;
-      }
-      return statements.map(() => ({ success: true, meta: {}, results: [] }));
-    },
-  } as unknown as D1Database;
-}
 
 /** Locate the Miniflare local D1 sqlite file the dev server uses. */
 function findLocalD1(): string {

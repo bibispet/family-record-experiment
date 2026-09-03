@@ -2,6 +2,25 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
 const baseUrl = process.env.FAMILY_RECORD_TEST_URL ?? "http://[::1]:3000";
+const skipIfUnreachable = process.argv.includes("--skip-if-unreachable");
+
+// The live smoke test drives a running server (npm run dev / npm run start).
+// In CI no server exists, so when --skip-if-unreachable is passed we do a cheap
+// connectivity probe and exit 0 gracefully instead of failing the whole suite.
+if (skipIfUnreachable) {
+  let reachable = false;
+  try {
+    await fetch(new URL("/", baseUrl), { method: "HEAD", signal: AbortSignal.timeout(2000) });
+    reachable = true;
+  } catch {
+    reachable = false;
+  }
+  if (!reachable) {
+    console.log(`Live authorization smoke skipped: no server reachable at ${baseUrl}`);
+    process.exit(0);
+  }
+}
+
 const runId = randomUUID();
 const owner = { id: `smoke-owner-${runId}`, email: `owner-${runId}@example.test` };
 const recipient = { id: `smoke-recipient-${runId}`, email: `recipient-${runId}@example.test` };
