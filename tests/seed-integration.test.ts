@@ -22,6 +22,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -318,6 +319,49 @@ function countAuditRows(action: string): number {
 
 function getAuditEvents(): Array<{ action: string; resource_type: string }> {
   return db.prepare("SELECT action, resource_type FROM audit_events ORDER BY occurred_at").all() as Array<{ action: string; resource_type: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Authz / custodianship port helpers — direct SQL fixtures for effective-dated
+// authorities, custodianship verification states, account claims, and
+// participant memberships. These create the exact rows the enforcement SQL
+// (chooseSpace, accessiblePeopleCte, managedPeople) reads, so each assertion
+// drives the real route+SQL path rather than a parallel in-memory model.
+// ---------------------------------------------------------------------------
+
+function ensureUserRow(subject: string, email: string): string {
+  const existing = db.prepare("SELECT id FROM users WHERE auth_subject = ?").get(subject) as { id: string } | undefined;
+  if (existing) return existing.id;
+  const id = randomUUID();
+  db.prepare("INSERT INTO users (id, auth_subject, email_display, created_at) VALUES (?, ?, ?, ?)")
+    .run(id, subject, email, Date.now());
+  return id;
+}
+
+function userIdForSubject(subject: string): string {
+  const row = db.prepare("SELECT id FROM users WHERE auth_subject = ?").get(subject) as { id: string } | undefined;
+  assert.ok(row, `user ${subject} must exist`);
+  return row.id;
+}
+
+function snapshotPeople(body: Record<string, unknown>): Array<Record<string, unknown>> {
+  return (body.data as Record<string, unknown>).people as Array<Record<string, unknown>>;
+}
+
+function snapshotRelationships(body: Record<string, unknown>): Array<Record<string, unknown>> {
+  return (body.data as Record<string, unknown>).relationships as Array<Record<string, unknown>>;
+}
+
+function insertParticipantMembership(userId: string, spaceId: string): void {
+  db.prepare(
+    "INSERT OR IGNORE INTO space_memberships (space_id, user_id, role, status, joined_at) VALUES (?, ?, 'participant', 'active', ?)"
+  ).run(spaceId, userId, Date.now());
+}
+
+function insertStewardMembership(userId: string, spaceId: string): void {
+  db.prepare(
+    "INSERT OR IGNORE INTO space_memberships (space_id, user_id, role, status, joined_at) VALUES (?, ?, 'steward', 'active', ?)"
+  ).run(spaceId, userId, Date.now());
 }
 
 // ---------------------------------------------------------------------------
@@ -659,4 +703,254 @@ test("snapshot: GET /api/family returns only the requesting user's space", async
   assert.ok(spaces.length >= 1, "owner sees at least 1 space");
   assert.ok(spaces.some((s) => s.id === ownerSpaceId), "owner sees own space");
   assert.ok(!spaces.some((s) => s.id === recipientSpaceId), "owner does NOT see recipient's space");
+});
+
+// ===========================================================================
+// 10. Ported authz scenarios (previously only in tests/authz.test.ts) driven
+//     against the real SQL enforcement path.
+//
+// These prove the behaviour the old, non-enforcing authz.ts described, but now
+// through chooseSpace / accessiblePeopleCte / managedPeople in family-store.ts
+// against the checked-in schema. Each uses a fresh third-party user so the
+// access (or denial) comes solely from the fixture rows inserted below.
+// ===========================================================================
+
+const BARE_PARTICIPANT = { subject: "bare-participant-subject", email: "bare@example.test" };
+const STEWARD_CREATOR = { subject: "steward-creator-subject", email: "stewardcreator@example.test" };
+const AUTH_GRANTEE = { subject: "auth-grantee-subject", email: "authgrantee@example.test" };
+const CUSTODY_USER = { subject: "custody-user-subject", email: "custody@example.test" };
+const CLAIM_USER = { subject: "claim-user-subject", email: "claim@example.test" };
+const SHARED_READER = { subject: "shared-reader-subject", email: "sharedreader@example.test" };
+const WRITE_ATTEMPTOR = { subject: "write-attemptor-subject", email: "writeattemptor@example.test" };
+
+// ---------------------------------------------------------------------------
+// 10a. Deny by default: space participation alone is not record visibility
+// ---------------------------------------------------------------------------
+
+test("authz port: a bare participant membership grants no read access", async () => {
+  const uid = ensureUserRow(BARE_PARTICIPANT.subject, BARE_PARTICIPANT.email);
+  insertParticipantMembership(uid, ownerSpaceId);
+
+  // Even though the user is an active participant in the owner's space, they
+  // have no steward membership, no person authority, no custodianship, and no
+  // share grant — so chooseSpace must refuse the space entirely.
+  const result = await familyGet(BARE_PARTICIPANT.subject, BARE_PARTICIPANT.email, ownerSpaceId);
+  assertDenied(result, "participant without any grant cannot read the space");
+});
+
+// ---------------------------------------------------------------------------
+// 10b. Steward can create but has no hidden read bypass without authority
+// ---------------------------------------------------------------------------
+
+test("authz port: a steward can create a person but cannot read people it has no authority over", async () => {
+  const uid = ensureUserRow(STEWARD_CREATOR.subject, STEWARD_CREATOR.email);
+  insertStewardMembership(uid, ownerSpaceId);
+
+  // Steward-creator can create (steward check in requireSteward passes) …
+  const created = await peoplePost(STEWARD_CREATOR.subject, STEWARD_CREATOR.email, "Steward-created Person", ownerSpaceId);
+  assert.equal(created.status, 201, "steward must be able to create a person");
+
+  // … but creating a person does NOT retroactively grant read over alice/bob.
+  const snapshot = await familyGet(STEWARD_CREATOR.subject, STEWARD_CREATOR.email, ownerSpaceId);
+  assertOk(snapshot, "steward reads their space");
+  const people = snapshotPeople(snapshot.body);
+  const aliceVisible = people.some((p) => p.id === aliceId);
+  const bobVisible = people.some((p) => p.id === bobId);
+  assert.equal(aliceVisible, false, "steward without authority must not read alice");
+  assert.equal(bobVisible, false, "steward without authority must not read bob");
+});
+
+// ---------------------------------------------------------------------------
+// 10c. Effective-dated person authority: null ends = active; past/future = not
+// ---------------------------------------------------------------------------
+
+test("authz port: person authority is effective-dated (open, past, and future intervals)", async () => {
+  const uid = ensureUserRow(AUTH_GRANTEE.subject, AUTH_GRANTEE.email);
+  insertParticipantMembership(uid, ownerSpaceId); // a grantee is an active space member
+  const authorityId = randomUUID();
+  const now = Date.now();
+
+  db.prepare(
+    "INSERT INTO person_authorities (id, space_id, person_id, user_id, role, starts_at, ends_at, granted_by_user_id, created_at) VALUES (?, ?, ?, ?, 'record_manager', ?, NULL, ?, ?)"
+  ).run(authorityId, ownerSpaceId, aliceId, uid, now, userIdForSubject(OWNER.subject), now);
+
+  // Open-ended authority → the grantee reads alice in the owner's space.
+  const openSnapshot = await familyGet(AUTH_GRANTEE.subject, AUTH_GRANTEE.email, ownerSpaceId);
+  assertOk(openSnapshot, "active authority grants read");
+  const openPeople = snapshotPeople(openSnapshot.body);
+  assert.ok(openPeople.some((p) => p.id === aliceId), "grantee sees alice under an open authority");
+
+  // Expire the authority (ends_at in the past) → access is revoked.
+  db.prepare(
+    "UPDATE person_authorities SET ends_at = ?, starts_at = ?, created_at = ? WHERE id = ?"
+  ).run(now - 1000, now - 5000, now, authorityId);
+  const expired = await familyGet(AUTH_GRANTEE.subject, AUTH_GRANTEE.email, ownerSpaceId);
+  assertDenied(expired, "an expired (ended) authority must not grant access");
+
+  // Future-dated authority (starts_at in the future) → not yet effective.
+  db.prepare(
+    "UPDATE person_authorities SET starts_at = ?, ends_at = NULL, created_at = ? WHERE id = ?"
+  ).run(now + 5000, now, authorityId);
+  const future = await familyGet(AUTH_GRANTEE.subject, AUTH_GRANTEE.email, ownerSpaceId);
+  assertDenied(future, "a future-dated authority must not grant access yet");
+
+  // Restore an open authority so the row remains well-formed for the run.
+  db.prepare(
+    "UPDATE person_authorities SET starts_at = ?, ends_at = NULL, created_at = ? WHERE id = ?"
+  ).run(now - 1000, now, authorityId);
+});
+
+// ---------------------------------------------------------------------------
+// 10d. Custodianship verification states + effective dating (SQL-enforceable)
+// ---------------------------------------------------------------------------
+
+test("authz port: only active + verified + effective custodianship grants access", async () => {
+  const uid = ensureUserRow(CUSTODY_USER.subject, CUSTODY_USER.email);
+  insertParticipantMembership(uid, ownerSpaceId); // a custodian is an active space member
+  const custodyId = randomUUID();
+  const now = Date.now();
+  const ownerId = userIdForSubject(OWNER.subject);
+
+  db.prepare(
+    "INSERT INTO custodianships (id, space_id, person_id, custodian_user_id, status, basis, verification_status, valid_from, valid_until, created_by_user_id, ended_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', 'legal_guardian', 'verified', ?, NULL, ?, NULL, ?, ?)"
+  ).run(custodyId, ownerSpaceId, aliceId, uid, now - 1000, ownerId, now, now);
+
+  // Active + verified + effective → the custodian reads alice.
+  const verifiedSnapshot = await familyGet(CUSTODY_USER.subject, CUSTODY_USER.email, ownerSpaceId);
+  assertOk(verifiedSnapshot, "active verified custodianship grants read");
+  const verifiedPeople = snapshotPeople(verifiedSnapshot.body);
+  assert.ok(verifiedPeople.some((p) => p.id === aliceId), "verified custodian sees alice");
+
+  // Pending verification → not authority.
+  db.prepare("UPDATE custodianships SET verification_status = 'pending' WHERE id = ?").run(custodyId);
+  const pending = await familyGet(CUSTODY_USER.subject, CUSTODY_USER.email, ownerSpaceId);
+  assertDenied(pending, "pending-verification custodianship must not grant access");
+
+  // Re-verified but contested status → still no authority.
+  db.prepare("UPDATE custodianships SET verification_status = 'verified', status = 'contested' WHERE id = ?").run(custodyId);
+  const contested = await familyGet(CUSTODY_USER.subject, CUSTODY_USER.email, ownerSpaceId);
+  assertDenied(contested, "contested custodianship must not grant access");
+
+  // Active + verified again, but valid_until in the past → not effective.
+  db.prepare("UPDATE custodianships SET status = 'active', verification_status = 'verified', valid_until = ?, valid_from = ? WHERE id = ?")
+    .run(now - 1000, now - 5000, custodyId);
+  const expired = await familyGet(CUSTODY_USER.subject, CUSTODY_USER.email, ownerSpaceId);
+  assertDenied(expired, "a custodianship that has expired must not grant access");
+
+  // Active + verified, valid_from in the future → not yet effective.
+  db.prepare("UPDATE custodianships SET valid_until = NULL, valid_from = ? WHERE id = ?").run(now + 5000, custodyId);
+  const future = await familyGet(CUSTODY_USER.subject, CUSTODY_USER.email, ownerSpaceId);
+  assertDenied(future, "a future-dated custodianship must not grant access yet");
+
+  // Restore a valid custodianship so the row remains well-formed for the run.
+  db.prepare("UPDATE custodianships SET valid_from = ?, valid_until = NULL, status = 'active', verification_status = 'verified' WHERE id = ?")
+    .run(now - 1000, custodyId);
+});
+
+// ---------------------------------------------------------------------------
+// 10e. A verified account claim alone never grants record access
+// ---------------------------------------------------------------------------
+
+test("authz port: a verified account claim alone never grants record access", async () => {
+  const uid = ensureUserRow(CLAIM_USER.subject, CLAIM_USER.email);
+  const ownerId = userIdForSubject(OWNER.subject);
+  const now = Date.now();
+  db.prepare(
+    "INSERT INTO person_account_links (id, space_id, person_id, user_id, claim_status, valid_from, valid_until, verified_at, verified_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'verified', ?, NULL, ?, ?, ?, ?)"
+  ).run(randomUUID(), ownerSpaceId, aliceId, uid, now - 1000, now, ownerId, now, now);
+
+  // The claim row is verified and current, yet no authority/custody/share
+  // exists for this user — the claim must not surface the person.
+  const result = await familyGet(CLAIM_USER.subject, CLAIM_USER.email, ownerSpaceId);
+  assertDenied(result, "a verified account claim alone must not grant access");
+});
+
+// ---------------------------------------------------------------------------
+// 10f. Share grant scoping: recipient sees only shared people, and the graph
+//      exposes no edge that touches a person outside the share. This is the
+//      highest-value port — a graph that filters nodes but leaks edges tells a
+//      viewer that two people they cannot see are related.
+// ---------------------------------------------------------------------------
+
+test("authz port: share recipient graph contains no edge touching a person outside the share", async () => {
+  // Establish an alice<->bob edge the owner manages (both are owner-managed).
+  const link = await relationshipPost(
+    OWNER.subject, OWNER.email,
+    { sourcePersonId: aliceId, targetPersonId: bobId, relationshipType: "parent_of", evidenceMode: "oral" },
+    ownerSpaceId,
+  );
+  assert.equal(link.status, 201, "owner creates the alice-bob edge");
+  relationshipId(link);
+
+  // Share ONLY alice to a fresh reader.
+  ensureUserRow(SHARED_READER.subject, SHARED_READER.email);
+  const share = await sharesPost(
+    OWNER.subject, OWNER.email,
+    { recipientEmail: SHARED_READER.email, personIds: [aliceId] },
+    ownerSpaceId,
+  );
+  const sid = shareId(share);
+
+  // Owner still sees the edge (both endpoints readable to the owner).
+  const ownerSnapshot = await familyGet(OWNER.subject, OWNER.email, ownerSpaceId);
+  assertOk(ownerSnapshot, "owner snapshot");
+  assert.ok(
+    snapshotRelationships(ownerSnapshot.body).some((r) =>
+      (r.sourcePersonId === aliceId && r.targetPersonId === bobId) ||
+      (r.sourcePersonId === bobId && r.targetPersonId === aliceId),
+    ),
+    "owner sees the alice-bob edge",
+  );
+
+  // The share reader sees ONLY alice in the node list…
+  const readerSnapshot = await familyGet(SHARED_READER.subject, SHARED_READER.email, ownerSpaceId);
+  assertOk(readerSnapshot, "share reader reads the shared space");
+  const readerPeople = snapshotPeople(readerSnapshot.body);
+  assert.equal(readerPeople.length, 1, "reader sees exactly the one shared person");
+  assert.equal(readerPeople[0].id, aliceId, "shared person is alice");
+
+  // …and the graph exposes NO edge referencing bob, even though alice (the
+  // shared endpoint) participates in that edge.
+  const readerEdges = snapshotRelationships(readerSnapshot.body);
+  for (const edge of readerEdges) {
+    assert.notEqual(edge.sourcePersonId, bobId, "no edge may touch an unshared person (source)");
+    assert.notEqual(edge.targetPersonId, bobId, "no edge may touch an unshared person (target)");
+    assert.ok(edge.sourcePersonId === aliceId, "any visible edge touches a shared person (source)");
+    assert.ok(edge.targetPersonId === aliceId, "any visible edge touches a shared person (target)");
+  }
+  assert.equal(
+    readerEdges.filter((r) => r.sourcePersonId === aliceId || r.targetPersonId === aliceId).length,
+    0,
+    "reader must not see the alice-bob edge at all",
+  );
+
+  // Clean up the live share so it cannot leak into later runs.
+  await revokePost(OWNER.subject, OWNER.email, sid, ownerSpaceId);
+});
+
+// ---------------------------------------------------------------------------
+// 10g. Relationship creation requires manage authority over BOTH endpoints
+// ---------------------------------------------------------------------------
+
+test("authz port: relationship creation requires managing both endpoints", async () => {
+  ensureUserRow(WRITE_ATTEMPTOR.subject, WRITE_ATTEMPTOR.email);
+
+  // A share recipient managing nothing cannot create a relationship even
+  // between people it can read.
+  const share = await sharesPost(
+    OWNER.subject, OWNER.email,
+    { recipientEmail: WRITE_ATTEMPTOR.email, personIds: [aliceId, bobId] },
+    ownerSpaceId,
+  );
+  const sid = shareId(share);
+
+  const attempt = await relationshipPost(
+    WRITE_ATTEMPTOR.subject, WRITE_ATTEMPTOR.email,
+    { sourcePersonId: aliceId, targetPersonId: bobId, relationshipType: "sibling_of", evidenceMode: "oral" },
+    ownerSpaceId,
+  );
+  assertDenied(attempt, "a share view-only reader cannot create a relationship");
+
+  // Clean up.
+  await revokePost(OWNER.subject, OWNER.email, sid, ownerSpaceId);
 });
