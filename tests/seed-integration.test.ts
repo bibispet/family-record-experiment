@@ -956,3 +956,42 @@ test("authz port: relationship creation requires managing both endpoints", async
   // Clean up.
   await revokePost(OWNER.subject, OWNER.email, sid, ownerSpaceId);
 });
+
+// ===========================================================================
+// 11. Production-path FK enforcement.
+//
+// Cross-space isolation depends on composite foreign keys (e.g. the
+// `custodianships(space_id, person_id)` → `people(space_id, id)` pair), and
+// those only hold while SQLite foreign-key enforcement is ON. This asserts the
+// enforcement that db/runtime.ts (the D1/Workers production path) turns on, so
+// a regression there fails here rather than silently allowing cross-space
+// rows. The harness's own inline migration helper never touches this pragma, so
+// whether FKs are ON in this database is decided solely by db/runtime.ts.
+// ===========================================================================
+
+test("production path: db/runtime.ts-enforced foreign keys reject a cross-space custodianship", async () => {
+  // Pull the real production initializer through the same cloudflare:workers
+  // interception the built worker uses.
+  const { ensureSchema } = await import("../db/runtime");
+  await ensureSchema(DB);
+
+  // FK enforcement must actually be ON — here that is set only by db/runtime.ts.
+  const pragmaRow = db.prepare("PRAGMA foreign_keys").get() as { foreign_keys: number };
+  assert.equal(pragmaRow.foreign_keys, 1, "db/runtime.ts must enable foreign-key enforcement");
+
+  const ownerId = userIdForSubject(OWNER.subject);
+  const now = Date.now();
+
+  // alice lives in ownerSpaceId. Referencing her from recipientSpaceId leaves
+  // no matching people(recipientSpaceId, aliceId) row, so the composite FK is
+  // violated. With enforcement ON the insert must be rejected; with it OFF the
+  // row would silently orphan — the exact cross-space leak this guards.
+  assert.throws(
+    () =>
+      db.prepare(
+        "INSERT INTO custodianships (id, space_id, person_id, custodian_user_id, status, basis, verification_status, valid_from, valid_until, created_by_user_id, ended_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', 'legal_guardian', 'verified', ?, NULL, ?, NULL, ?, ?)"
+      ).run(randomUUID(), recipientSpaceId, aliceId, ownerId, now, ownerId, now, now),
+    /FOREIGN KEY constraint failed/i,
+    "a cross-space custodianship must be rejected while foreign keys are enforced",
+  );
+});
