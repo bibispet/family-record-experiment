@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import {
   EXAMPLE_SEED_PLAN,
@@ -240,5 +241,37 @@ test("purge provenance covers every table in foreign-key-safe order", () => {
     } else {
       assert.ok(Object.hasOwn(provenance.rowIds, table), `${table} must have an explicit provenance list`);
     }
+  }
+});
+
+test("every tests/*.test.ts on disk is wired into a test script (and no listed file is missing)", () => {
+  // The test:unit list is explicit rather than a glob, which is good for
+  // control but fails silently when a merge drops an entry or a file is added
+  // (seed-purge.test.ts was quietly dropped that way). A test file that is not
+  // wired into `npm run test:unit` or `npm run test:integration` never runs,
+  // so assert the union of those two lists covers the files on disk and cites
+  // no file that is absent.
+  const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+
+  const listedFiles = new Set<string>();
+  for (const scriptName of ["test:unit", "test:integration"]) {
+    const script = pkg.scripts[scriptName];
+    if (!script) continue;
+    for (const token of script.split(/\s+/)) {
+      if (token.startsWith("tests/") && token.endsWith(".test.ts")) listedFiles.add(token.slice("tests/".length));
+    }
+  }
+
+  const onDisk = readdirSync(join(process.cwd(), "tests"))
+    .filter((name) => name.endsWith(".test.ts"))
+    .sort();
+
+  for (const name of onDisk) {
+    assert.ok(listedFiles.has(name), `tests/${name} exists on disk but is not in test:unit or test:integration`);
+  }
+  for (const name of listedFiles) {
+    assert.ok(onDisk.includes(name), `test script lists tests/${name} but no such file exists`);
   }
 });
