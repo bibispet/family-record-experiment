@@ -1,4 +1,4 @@
-import { cleanId, routeError } from "../../../lib/api";
+import { assertSafeMutation, cleanId, cleanText, noStoreJson, readJsonObject, requestedSpaceId, routeError } from "../../../lib/api";
 import { getApiActorFromRequest } from "../../../lib/identity";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -20,6 +20,36 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         "X-Content-Type-Options": "nosniff",
       },
     });
+  } catch (error) {
+    return routeError(error);
+  }
+}
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const actor = getApiActorFromRequest(request);
+    const { updateMediaCaption } = await import("../../../lib/family-store");
+    assertSafeMutation(request, "json");
+    const { id } = await context.params;
+    const body = await readJsonObject(request);
+    const caption = cleanText(body.caption, "Caption", { max: 300, optional: true }) ?? "";
+    const spaceId = requestedSpaceId(request);
+    const media = await updateMediaCaption(actor, cleanId(id), caption, spaceId ? cleanId(spaceId, "Family space") : undefined);
+    return noStoreJson({ media });
+  } catch (error) {
+    return routeError(error);
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const actor = getApiActorFromRequest(request);
+    const { deleteMedia } = await import("../../../lib/family-store");
+    assertSafeMutation(request);
+    const { id } = await context.params;
+    const spaceId = requestedSpaceId(request);
+    const result = await deleteMedia(actor, cleanId(id), spaceId ? cleanId(spaceId, "Family space") : undefined);
+    return noStoreJson({ deleted: result });
   } catch (error) {
     return routeError(error);
   }

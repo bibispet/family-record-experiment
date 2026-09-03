@@ -251,6 +251,7 @@ export default function FamilyDashboard({
         <a href="#bonds">Bonds</a>
         <a href="#memories">Stories &amp; media</a>
         <a href="#shares">Shares</a>
+        <Link href={`/family/graph?space=${encodeURIComponent(data.familyId)}`}>Graph view</Link>
         <Link href="/">Home</Link>
       </nav>
 
