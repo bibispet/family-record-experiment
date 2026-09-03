@@ -5,6 +5,15 @@
  * current civil-date boundary and reports every policy decision that prevents
  * a caller from proceeding. Callers must supply the civil date for a resolved
  * legal timezone; this module never guesses from the server or client clock.
+ *
+ * (Retained as unwired domain policy.) Nowhere in app/ does this module feed a
+ * runtime path — authorization is enforced entirely by the SQL in
+ * family-store.ts. Unlike authz.ts (which was deleted after its scenarios were
+ * ported into tests/seed-integration.test.ts), this file is kept because it is
+ * the only home for the pure policy rules (leap-day majority, 18th birthday,
+ * civil-state evaluation) and it is covered by tests/custodianship.test.ts.
+ * Decide custodianship-expiry enforcement per DECISIONS.md Section 8 before
+ * wiring it anywhere.
  */
 
 export const MAJORITY_AGE_YEARS = 18 as const;

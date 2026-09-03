@@ -234,3 +234,55 @@
   standing text. Its `AGENTS.md` was replaced with a pointer line naming the
   canonical clone path and file only.
 
+## 2026-09-03 — authz.ts deleted; its scenarios live in the SQL path
+Delegated to the integration harness (`tests/seed-integration.test.ts`), which
+drives `family-store.ts` through the real routes against a live
+`node:sqlite` database. The old `app/lib/authz.ts` was never wired to a
+runtime path and had drifted from the actual SQL enforcement surface. Its
+scenarios (deny-by-default participant, steward create-without-read-bypass,
+effective-dated `person_authorities`, custodianship verification/effective
+states, verified-account-claim neutrality, share scoping with graph-edge
+filtering, relationship creation requiring manage over both endpoints) were
+ported and committed (`f0fb5d1`) before the file was removed.
+
+- Branch: `test/integration-harness`, commits `16f21cd` (harness) then
+  `f0fb5d1` (ports), pushed to `origin/test/integration-harness`.
+- `app/lib/authz.ts` + `app/lib/authz.test.ts` deleted in their own commit so
+  the removal reverts alone.
+- `app/lib/custodianship.ts` is deliberately RETAINED as unwired domain policy
+  — it is the only home for the pure policy rules (leap-day majority, 18th
+  birthday, civil-state evaluation) and is covered by
+  `tests/custodianship.test.ts`. `family-store.ts` reads the `custodianships`
+  TABLE via SQL; it never imports the module.
+
+### Section-8 style decision — custodianship expiry enforcement
+Status: OPEN. Decide whether custodianship expiry (`valid_until` passing) is
+enforced automatically by the SQL layer (as `person_authorities.ends_at` and
+`share_grants.revoked_at` already are, via `valid_until IS NULL OR
+valid_until > ?` predicates) or is deliberately manual (a steward must
+explicitly end it). Today the SQL treats an expired custodianship as no longer
+granting access automatically — but no scheduled/batch job surfaces "this
+custodianship just expired" to a steward, so the removal is silent. Record the
+chosen behavior and the stewardship UX before wiring custodianship.ts.
+
+## 2026-09-03 — integration harness merged into main; revert handle recorded
+
+- `test/integration-harness` merged into `main` with `--no-ff` so the whole
+  harness + authz port + authz deletion is a single, individually reverrible
+  unit. Both parents were green and the merged result was re-verified
+  (typecheck + lint + the full test suite — unit 79, integration 27, render 19,
+  build-elimination 4) on the merge commit itself before it was pushed.
+- Merge commit: `f902c16`
+- revert handle: `git revert -m 1 f902c16`
+- Conflict note: `scripts/seed.ts` conflicted because `main` added the
+  provenance-safe purge (`57ce454`) while the harness factored the node:sqlite
+  D1 adapter into `db/node-sqlite-d1.ts`. Resolved by keeping `main`'s
+  provenance-safe purge and importing the shared adapter, and by pointing the
+  seed-runner structural test at the shared module (`tests/seed.test.ts`).
+- `LORE.md` (untracked stale v3.1 copy) was diffsed against the tracked
+  `LORE-AGENT-BRIEF.md` (v3.8): it held no unique content and was deleted.
+
+- Notes for a revert: use `--no-edit` and default to reverting the whole
+  merge. If you need to keep any post-merge DECISIONS.md entries, cherry-pick
+  them forward after reverting; they are documentation, not code.
+
