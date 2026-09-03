@@ -108,6 +108,13 @@ const uploaded = (await json(`/api/people/${first.id}/media`, {
   body: form,
   expected: 201,
 })).media;
+const updatedMedia = (await json(`/api/media/${uploaded.id}`, {
+  actor: owner,
+  spaceId: ownerSpaceId,
+  method: "PATCH",
+  json: { caption: "Updated private smoke-test photo" },
+})).media;
+assert.equal(updatedMedia.caption, "Updated private smoke-test photo");
 
 await request(`/api/media/${uploaded.id}?space=${ownerSpaceId}`, { actor: recipient, expected: 404 });
 await request(`/api/people/${first.id}`, {
@@ -138,6 +145,7 @@ assert.deepEqual(sharedSnapshot.data.people.map((person) => person.id), [first.i
 assert.equal(sharedSnapshot.data.relationships.length, 0, "an edge with a hidden endpoint must not be returned");
 assert.equal(sharedSnapshot.data.stories.length, 1);
 assert.equal(sharedSnapshot.data.media.length, 1);
+assert.equal(sharedSnapshot.data.media[0].caption, "Updated private smoke-test photo");
 assert.deepEqual(sharedSnapshot.data.access.managedPersonIds, []);
 await request("/api/audit", { actor: recipient, spaceId: ownerSpaceId, expected: 403 });
 await request(`/api/media/${uploaded.id}?space=${ownerSpaceId}`, { actor: recipient });
