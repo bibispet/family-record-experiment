@@ -18,32 +18,20 @@ test("renders the finished product welcome page", async () => {
   const response = await request("/", { headers: { accept: "text/html" } });
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>Family Record Experiment<\/title>/i);
+  assert.match(html, /<title>Lore Family Demo<\/title>/i);
   assert.match(html, /Keep the people and stories that make you/);
-  assert.match(html, /Private by default/);
+  assert.match(html, /Demo only/);
+  assert.match(html, /Anything you enter stays on this page and disappears when you refresh/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("redirects anonymous family pages to dispatch-owned sign in", async () => {
-  // The vendor sign-in destination belongs to the header adapter. The default
-  // deny provider offers no sign-in URL at all, so this redirect behavior is
-  // asserted with the header adapter explicitly selected.
-  const previous = process.env.IDENTITY_PROVIDER;
-  const previousProxy = process.env.TRUSTED_IDENTITY_PROXY;
-  process.env.IDENTITY_PROVIDER = "header";
-  process.env.TRUSTED_IDENTITY_PROXY = "1";
-  try {
-    const response = await request("/family", {
-      headers: { accept: "text/html" },
-      redirect: "manual",
-    });
-    assert.ok([302, 303, 307, 308].includes(response.status));
-    assert.match(response.headers.get("location") ?? "", /^\/signin-with-chatgpt\?return_to=/);
-  } finally {
-    if (previous === undefined) delete process.env.IDENTITY_PROVIDER;
-    else process.env.IDENTITY_PROVIDER = previous;
-    if (previousProxy === undefined) delete process.env.TRUSTED_IDENTITY_PROXY;
-    else process.env.TRUSTED_IDENTITY_PROXY = previousProxy;
+test("renders the fictional demo and warning on every page", async () => {
+  for (const path of ["/family", "/family/graph"]) {
+    const response = await request(path, { headers: { accept: "text/html" } });
+    assert.equal(response.status, 200, path);
+    const html = await response.text();
+    assert.match(html, /Demo only/, path);
+    assert.match(html, /Amara Adeyemi/, path);
   }
 });
 
@@ -88,4 +76,3 @@ test("anonymous request is denied without leaking data: PATCH /api/family", asyn
   assert.equal(body.code, "authentication_required");
   assert.deepEqual(Object.keys(body).sort(), ["code", "error"]);
 });
-

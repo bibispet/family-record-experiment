@@ -15,6 +15,7 @@
     "test:render": "node --test tests/rendered-html.test.mjs",
     "test:build": "node --test tests/build-elimination.test.mjs",
     "test:live": "node tests/live-http-smoke.mjs",
+    "demo:verify": "node scripts/verify-demo-build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",

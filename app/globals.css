@@ -20,6 +20,20 @@ a { color: inherit; }
 button, input, textarea, select { font: inherit; }
 :focus-visible { outline: 3px solid #d28b43; outline-offset: 3px; }
 
+.demo-banner {
+  position: sticky;
+  z-index: 100;
+  top: 0;
+  padding: 10px max(14px, calc((100vw - 1180px) / 2));
+  color: #30200b;
+  background: #ffd978;
+  border-bottom: 1px solid #b37918;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
+}
+.demo-banner strong { margin-right: .3em; }
+
 .welcome-shell { min-height: 100vh; overflow: hidden; background: radial-gradient(circle at 80% 15%, #e9dfcb 0, transparent 27rem), var(--cream); }
 .welcome-nav { width: min(1180px, calc(100% - 40px)); margin: 0 auto; min-height: 96px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(32,50,44,.16); }
 .wordmark { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; font-family: var(--font-serif), Georgia, serif; font-weight: 600; font-size: 18px; }
@@ -179,4 +193,3 @@ button, input, textarea, select { font: inherit; }
   .family-graph-canvas { aspect-ratio: 4/3; }
   .family-graph-legend { gap: 10px; font-size: 12px; }
 }
-

@@ -22,6 +22,7 @@ import {
   type FamilyStory,
   type FamilyViewer,
 } from "./family-dashboard-state";
+import { demoRequest } from "./demo-client";
 
 export type {
   FamilyDashboardData,
@@ -86,9 +87,11 @@ function computeAge(birthDate: string | null): string | null {
 export default function FamilyDashboard({
   viewer,
   initialData,
+  demoMode = false,
 }: {
   viewer: FamilyViewer;
   initialData: FamilyDashboardData;
+  demoMode?: boolean;
 }) {
   const [data, setData] = useState(initialData);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -114,12 +117,19 @@ export default function FamilyDashboard({
   );
   const who = viewer.displayName || viewer.email || "Signed-in family member";
 
+  function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return demoMode ? demoRequest<T>(path, init, data) : api<T>(path, data.familyId, init);
+  }
+
   async function run(action: () => Promise<string>) {
     setBusy(true);
     setFeedback({ kind: "pending", text: "Saving…" });
     try {
       const text = await action();
-      setFeedback({ kind: "success", text });
+      setFeedback({
+        kind: "success",
+        text: demoMode ? "Demo updated on this page only. Refresh to restore the fictional seed." : text,
+      });
     } catch (error) {
       setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Something went wrong." });
     } finally {
@@ -133,7 +143,7 @@ export default function FamilyDashboard({
     const displayName = String(new FormData(form).get("displayName") ?? "");
     const birthDate = String(new FormData(form).get("birthDate") ?? "") || null;
     void run(async () => {
-      const result = await api<{ person: FamilyPerson }>("/api/people", data.familyId, {
+      const result = await request<{ person: FamilyPerson }>("/api/people", {
         method: "POST",
         body: JSON.stringify({ displayName, birthDate }),
       });
@@ -150,7 +160,7 @@ export default function FamilyDashboard({
     const personId = String(fields.get("personId") ?? "");
     const body = String(fields.get("body") ?? "");
     void run(async () => {
-      const result = await api<{ story: FamilyStory }>(`/api/people/${personId}/stories`, data.familyId, {
+      const result = await request<{ story: FamilyStory }>(`/api/people/${personId}/stories`, {
         method: "POST",
         body: JSON.stringify({ body }),
       });
@@ -165,7 +175,7 @@ export default function FamilyDashboard({
     const form = event.currentTarget;
     const body = String(new FormData(form).get("body") ?? "");
     void run(async () => {
-      const result = await api<{ story: FamilyStory }>(`/api/stories/${storyId}`, data.familyId, {
+      const result = await request<{ story: FamilyStory }>(`/api/stories/${storyId}`, {
         method: "PATCH",
         body: JSON.stringify({ body }),
       });
@@ -177,7 +187,7 @@ export default function FamilyDashboard({
 
   function onDeleteStory(storyId: string) {
     void run(async () => {
-      await api<{ id: string }>(`/api/stories/${storyId}`, data.familyId, { method: "DELETE" });
+      await request<{ id: string }>(`/api/stories/${storyId}`, { method: "DELETE" });
       setData((current) => withDeletedStory(current, storyId));
       setDeletingStoryId(null);
       return "Story removed from the record.";
@@ -189,7 +199,7 @@ export default function FamilyDashboard({
     const form = event.currentTarget;
     const caption = String(new FormData(form).get("caption") ?? "") || null;
     void run(async () => {
-      const result = await api<{ media: FamilyMedia }>(`/api/media/${mediaId}`, data.familyId, {
+      const result = await request<{ media: FamilyMedia }>(`/api/media/${mediaId}`, {
         method: "PATCH",
         body: JSON.stringify({ caption }),
       });
@@ -201,7 +211,7 @@ export default function FamilyDashboard({
 
   function onDeleteMedia(mediaId: string) {
     void run(async () => {
-      await api<{ id: string }>(`/api/media/${mediaId}`, data.familyId, { method: "DELETE" });
+      await request<{ id: string }>(`/api/media/${mediaId}`, { method: "DELETE" });
       setData((current) => withDeletedMedia(current, mediaId));
       setDeletingMediaId(null);
       return "Media removed from the record.";
@@ -217,7 +227,7 @@ export default function FamilyDashboard({
       const em = fields.get("evidenceMode");
       if (rt) body.relationshipType = String(rt);
       if (em) body.evidenceMode = String(em);
-      const result = await api<{ relationship: FamilyRelationship }>(`/api/relationships/${relationshipId}`, data.familyId, {
+      const result = await request<{ relationship: FamilyRelationship }>(`/api/relationships/${relationshipId}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       });
@@ -231,7 +241,7 @@ export default function FamilyDashboard({
     if (auditEvents !== null) { setAuditEvents(null); return; }
     setAuditLoading(true);
     try {
-      const result = await api<{ events: typeof auditEvents }>(`/api/audit`, data.familyId);
+      const result = await request<{ events: typeof auditEvents }>("/api/audit");
       setAuditEvents(result.events ?? []);
     } catch {
       setAuditEvents([]);
@@ -245,7 +255,7 @@ export default function FamilyDashboard({
     const form = event.currentTarget;
     const fields = new FormData(form);
     void run(async () => {
-      const result = await api<{ relationship: FamilyRelationship }>("/api/relationships", data.familyId, {
+      const result = await request<{ relationship: FamilyRelationship }>("/api/relationships", {
         method: "POST",
         body: JSON.stringify({
           sourcePersonId: fields.get("sourcePersonId"),
@@ -265,7 +275,7 @@ export default function FamilyDashboard({
     const form = event.currentTarget;
     const recipientEmail = String(new FormData(form).get("recipientEmail") ?? "");
     void run(async () => {
-      const result = await api<{ share: FamilyShare }>("/api/shares", data.familyId, {
+      const result = await request<{ share: FamilyShare }>("/api/shares", {
         method: "POST",
         body: JSON.stringify({ recipientEmail, personIds: selectedShareIds }),
       });
@@ -282,7 +292,7 @@ export default function FamilyDashboard({
     const name = String(fields.get("familyName") ?? "").trim();
     if (!name) return;
     void run(async () => {
-      const result = await api<{ space: { id: string; name: string } }>("/api/family", data.familyId, {
+      const result = await request<{ space: { id: string; name: string } }>("/api/family", {
         method: "PATCH",
         body: JSON.stringify({ name }),
       });
@@ -298,7 +308,7 @@ export default function FamilyDashboard({
     const fields = new FormData(form);
     const personId = String(fields.get("personId") ?? "");
     void run(async () => {
-      const result = await api<{ media: FamilyMedia }>(`/api/people/${personId}/media`, data.familyId, {
+      const result = await request<{ media: FamilyMedia }>(`/api/people/${personId}/media`, {
         method: "POST",
         body: fields,
       });
@@ -314,7 +324,7 @@ export default function FamilyDashboard({
     const displayName = String(fields.get("displayName") ?? "");
     const birthDate = String(fields.get("birthDate") ?? "") || null;
     void run(async () => {
-      const result = await api<{ person: FamilyPerson }>(`/api/people/${personId}`, data.familyId, {
+      const result = await request<{ person: FamilyPerson }>(`/api/people/${personId}`, {
         method: "PATCH",
         body: JSON.stringify({ displayName, birthDate }),
       });
@@ -326,7 +336,7 @@ export default function FamilyDashboard({
 
   function onUnlinkRelationship(relationshipId: string) {
     void run(async () => {
-      const result = await api<{ relationship: FamilyRelationship }>(`/api/relationships/${relationshipId}/unlink`, data.familyId, {
+      const result = await request<{ relationship: FamilyRelationship }>(`/api/relationships/${relationshipId}/unlink`, {
         method: "POST",
       });
       setData((current) => withUnlinkedRelationship(current, result.relationship.id, result.relationship.endedAt ?? new Date().toISOString()));
@@ -337,7 +347,7 @@ export default function FamilyDashboard({
 
   function onRevokeShare(shareId: string) {
     void run(async () => {
-      const result = await api<{ share: FamilyShare }>(`/api/shares/${shareId}/revoke`, data.familyId, {
+      const result = await request<{ share: FamilyShare }>(`/api/shares/${shareId}/revoke`, {
         method: "POST",
       });
       setData((current) => withRevokedShare(current, result.share.id, result.share.revokedAt ?? new Date().toISOString()));

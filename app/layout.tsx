@@ -6,14 +6,19 @@ const sans = Geist({ variable: "--font-sans", subsets: ["latin"] });
 const serif = Lora({ variable: "--font-serif", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "Family Record Experiment", template: "%s · Family Record Experiment" },
-  description: "A private place for your family's people, photos, and stories.",
+  title: { default: "Lore Family Demo", template: "%s · Lore Family Demo" },
+  description: "A fictional, seed-only demo of a private family-record interaction model.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${serif.variable}`}>{children}</body>
+      <body className={`${sans.variable} ${serif.variable}`}>
+        <aside className="demo-banner" role="note">
+          <strong>Demo only.</strong> Every person and story is fictional. Anything you enter stays on this page and disappears when you refresh.
+        </aside>
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,18 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getRscViewer, getSignInPath } from "./lib/identity";
-
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: { absolute: "Family Record Experiment" },
-  description: "A private place for your family's people, photos, and stories.",
+  title: { absolute: "Lore Family Demo" },
+  description: "A fictional, seed-only demo of a private family-record interaction model.",
 };
 
-export default async function Home() {
-  const viewer = await getRscViewer();
-  const recordPath = viewer ? "/family" : getSignInPath("/family");
-
+export default function Home() {
   return (
     <main className="welcome-shell">
       <nav className="welcome-nav" aria-label="Main navigation">
@@ -20,13 +14,7 @@ export default async function Home() {
           <span className="wordmark-mark" aria-hidden="true">F</span>
           <span>Family Record Experiment</span>
         </Link>
-        {recordPath === null ? (
-          <span className="button button-secondary" aria-disabled="true">Sign-in not configured</span>
-        ) : (
-          <a className="button button-secondary" href={recordPath}>
-            {viewer ? "Open family record" : "Sign in"}
-          </a>
-        )}
+        <a className="button button-secondary" href="/family">Open demo</a>
       </nav>
 
       <section className="welcome-hero">
@@ -38,14 +26,8 @@ export default async function Home() {
             and the stories you do not want to lose.
           </p>
           <div className="welcome-actions">
-            {recordPath === null ? (
-              <span className="button button-primary" aria-disabled="true">Sign-in not configured</span>
-            ) : (
-              <a className="button button-primary" href={recordPath}>
-                {viewer ? "Open your family record" : "Start your family record"}
-              </a>
-            )}
-            <span className="privacy-note">Private by default. No in-app analytics, feed, likes, or advertising.</span>
+            <a className="button button-primary" href="/family">Try the fictional family record</a>
+            <span className="privacy-note">Demo changes stay on this page only. No in-app analytics, feed, likes, or advertising.</span>
           </div>
         </div>
 
