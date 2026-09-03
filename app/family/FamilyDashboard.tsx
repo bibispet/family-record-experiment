@@ -22,7 +22,6 @@ import {
   type FamilyStory,
   type FamilyViewer,
 } from "./family-dashboard-state";
-import { demoRequest } from "./demo-client";
 
 export type {
   FamilyDashboardData,
@@ -118,7 +117,7 @@ export default function FamilyDashboard({
   const who = viewer.displayName || viewer.email || "Signed-in family member";
 
   function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    return demoMode ? demoRequest<T>(path, init, data) : api<T>(path, data.familyId, init);
+    return api<T>(path, data.familyId, init);
   }
 
   async function run(action: () => Promise<string>) {
@@ -126,10 +125,7 @@ export default function FamilyDashboard({
     setFeedback({ kind: "pending", text: "Saving…" });
     try {
       const text = await action();
-      setFeedback({
-        kind: "success",
-        text: demoMode ? "Demo updated on this page only. Refresh to restore the fictional seed." : text,
-      });
+      setFeedback({ kind: "success", text });
     } catch (error) {
       setFeedback({ kind: "error", text: error instanceof Error ? error.message : "Something went wrong." });
     } finally {
@@ -357,12 +353,14 @@ export default function FamilyDashboard({
   }
 
   return (
-    <main className="family-dashboard">
+    <main className={`family-dashboard${demoMode ? " demo-read-only" : ""}`}>
       <a className="skip-link" href="#people">Skip to people</a>
       <header className="family-dashboard-header">
         <div>
-          <p className="eyebrow">Private family record</p>
-          {editingFamilyName ? (
+          <p className="eyebrow">{demoMode ? "Read-only fictional record" : "Private family record"}</p>
+          {demoMode ? (
+            <h1>{data.familyName}</h1>
+          ) : editingFamilyName ? (
             <form className="inline-edit" onSubmit={onRenameFamily} style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
               <input name="familyName" type="text" defaultValue={data.familyName} maxLength={200} required disabled={busy} />
               <button className="button button-primary" type="submit" disabled={busy}>Save</button>
@@ -371,7 +369,7 @@ export default function FamilyDashboard({
           ) : (
             <button className="text-button" type="button" disabled={busy} onClick={() => setEditingFamilyName(true)} style={{ fontSize: "inherit", fontFamily: "inherit", fontWeight: "inherit", padding: 0, lineHeight: "inherit" }}>{data.familyName}</button>
           )}
-          <p>Viewing as {who}. There is no feed, no public discovery, and no advertising here.</p>
+          <p>{demoMode ? "Explore the fictional family below. Nothing can be entered, uploaded, or saved." : `Viewing as ${who}. There is no feed, no public discovery, and no advertising here.`}</p>
           {data.spaces.length > 1 ? (
             <label className="space-picker">
               Family space
@@ -413,7 +411,7 @@ export default function FamilyDashboard({
           <p>A name is enough. A family role does not make anyone omniscient.</p>
         </div>
         <div className="dashboard-grid">
-          {data.access.canCreatePeople ? (
+          {!demoMode && data.access.canCreatePeople ? (
             <form className="dashboard-card capture-card" onSubmit={onCreatePerson}>
               <h3>Add a person</h3>
               <label>
@@ -426,12 +424,12 @@ export default function FamilyDashboard({
               </label>
               <button className="button button-primary" type="submit" disabled={busy}>Save person</button>
             </form>
-          ) : (
+          ) : !demoMode ? (
             <div className="dashboard-card">
               <h3>Add a person</h3>
               <p className="empty-state">Only a space steward can create people here.</p>
             </div>
-          )}
+          ) : null}
           <div className="dashboard-card">
             <h3>Visible in this space</h3>
             {data.people.length === 0 ? (
@@ -458,7 +456,7 @@ export default function FamilyDashboard({
                   <li key={person.id}>
                     <h4>{person.displayName}</h4>
                     <p>
-                      {data.access.managedPersonIds.includes(person.id) ? "You can manage this record." : "View only."}
+                      {demoMode ? "Fictional demo record." : data.access.managedPersonIds.includes(person.id) ? "You can manage this record." : "View only."}
                       {person.birthDate ? ` Born ${person.birthDate}.` : ""}
                       {(() => { const age = computeAge(person.birthDate ?? null); return age !== null ? ` Age ${age}.` : null; })()}
                     </p>
@@ -520,7 +518,7 @@ export default function FamilyDashboard({
                         })()}
                       </div>
                     ) : null}
-                    {data.access.managedPersonIds.includes(person.id) && editingPersonId !== person.id ? (
+                    {!demoMode && data.access.managedPersonIds.includes(person.id) && editingPersonId !== person.id ? (
                       <button className="edit-person-button text-button" type="button" disabled={busy} onClick={() => setEditingPersonId(person.id)}>
                         Edit
                       </button>
@@ -559,7 +557,7 @@ export default function FamilyDashboard({
           <p>Documented and oral knowledge stay distinct. A bond is never a permission.</p>
         </div>
         <div className="dashboard-grid">
-          <form className="dashboard-card capture-card" onSubmit={onCreateRelationship}>
+          {!demoMode ? <form className="dashboard-card capture-card" onSubmit={onCreateRelationship}>
             <h3>Record a relationship</h3>
             <label>
               First person
@@ -593,7 +591,7 @@ export default function FamilyDashboard({
               </label>
             </fieldset>
             <button className="button button-primary" type="submit" disabled={busy || managedPeople.length < 2}>Save bond</button>
-          </form>
+          </form> : null}
           <div className="dashboard-card">
             <h3>Recorded relationships</h3>
             {data.relationships.length === 0 ? (
@@ -616,7 +614,7 @@ export default function FamilyDashboard({
                     <span className="relationship-mode">
                       {bond.endedAt ? "Ended" : bond.evidenceMode === "oral" ? "Oral" : "Documented"}
                     </span>
-                    {canUnlink && !bond.endedAt && editingRelationshipId !== bond.id ? (
+                    {!demoMode && canUnlink && !bond.endedAt && editingRelationshipId !== bond.id ? (
                       <button className="edit-person-button text-button" type="button" disabled={busy} onClick={() => setEditingRelationshipId(bond.id)}>
                         Edit
                       </button>
@@ -644,7 +642,7 @@ export default function FamilyDashboard({
                         </div>
                       </form>
                     ) : null}
-                    {canUnlink && pendingUnlinkId !== bond.id ? (
+                    {!demoMode && canUnlink && pendingUnlinkId !== bond.id ? (
                       <button className="edit-person-button text-button" type="button" disabled={busy} onClick={() => setPendingUnlinkId(bond.id)}>
                         End this bond
                       </button>
@@ -672,7 +670,7 @@ export default function FamilyDashboard({
           <p>Stories inherit the owning person. Files are served only after a fresh authorization check.</p>
         </div>
         <div className="dashboard-grid">
-          <form className="dashboard-card capture-card" onSubmit={onCreateStory}>
+          {!demoMode ? <form className="dashboard-card capture-card" onSubmit={onCreateStory}>
             <h3>Add a story</h3>
             <label>
               About
@@ -685,8 +683,8 @@ export default function FamilyDashboard({
               <textarea name="body" maxLength={4000} required disabled={busy} />
             </label>
             <button className="button button-primary" type="submit" disabled={busy || managedPeople.length === 0}>Save story</button>
-          </form>
-          <form className="dashboard-card capture-card" onSubmit={onUploadMedia}>
+          </form> : null}
+          {!demoMode ? <form className="dashboard-card capture-card" onSubmit={onUploadMedia}>
             <h3>Add a photo or voice note</h3>
             <label>
               About
@@ -710,7 +708,7 @@ export default function FamilyDashboard({
               <input name="caption" type="text" maxLength={300} disabled={busy} />
             </label>
             <button className="button button-primary" type="submit" disabled={busy || managedPeople.length === 0}>Store privately</button>
-          </form>
+          </form> : null}
         </div>
         <div className="dashboard-card memory-list-card">
           <h3>Visible memories</h3>
@@ -737,7 +735,7 @@ export default function FamilyDashboard({
                   ) : (
                     <>
                       <p>{story.body}</p>
-                      {canManage && deletingStoryId !== story.id ? (
+                      {!demoMode && canManage && deletingStoryId !== story.id ? (
                         <div className="form-actions">
                           <button className="text-button" type="button" disabled={busy} onClick={() => setEditingStoryId(story.id)}>Edit</button>
                           <button className="text-button" type="button" disabled={busy} onClick={() => setDeletingStoryId(story.id)}>Delete</button>
@@ -783,7 +781,7 @@ export default function FamilyDashboard({
                           <track kind="captions" srcLang="en" label="Captions" />
                         </audio>
                       ) : null}
-                      {canManage && deletingMediaId !== item.id ? (
+                      {!demoMode && canManage && deletingMediaId !== item.id ? (
                         <div className="form-actions">
                           <button className="text-button" type="button" disabled={busy} onClick={() => setEditingMediaId(item.id)}>Edit caption</button>
                           <button className="text-button" type="button" disabled={busy} onClick={() => setDeletingMediaId(item.id)}>Delete</button>
@@ -813,7 +811,7 @@ export default function FamilyDashboard({
           <p>View only. The recipient must already have signed in. Graph changes will not widen this set.</p>
         </div>
         <div className="dashboard-grid">
-          <form className="dashboard-card capture-card" onSubmit={onCreateShare}>
+          {!demoMode ? <form className="dashboard-card capture-card" onSubmit={onCreateShare}>
             <h3>Share selected people</h3>
             <label>
               Recipient email
@@ -843,7 +841,7 @@ export default function FamilyDashboard({
             <button className="button button-primary" type="submit" disabled={busy || selectedShareIds.length === 0}>
               Create view-only share
             </button>
-          </form>
+          </form> : null}
           <div className="dashboard-card">
             <h3>Shares you created</h3>
             {data.shares.length === 0 ? (
@@ -854,7 +852,7 @@ export default function FamilyDashboard({
                   <li key={share.id}>
                     <p>{share.recipientEmail ?? "Signed-in family member"}</p>
                     <span className="relationship-mode">{share.revokedAt ? "Revoked" : share.permission ?? "view"}</span>
-                    {!share.revokedAt && pendingRevokeId !== share.id ? (
+                    {!demoMode && !share.revokedAt && pendingRevokeId !== share.id ? (
                       <button className="edit-person-button text-button" type="button" disabled={busy} onClick={() => setPendingRevokeId(share.id)}>
                         Revoke
                       </button>
@@ -881,9 +879,13 @@ export default function FamilyDashboard({
           <p>Every mutation is recorded. Nothing is silently changed.</p>
         </div>
         <div className="dashboard-card">
-          <button className="text-button" type="button" disabled={busy || auditLoading} onClick={fetchAudit}>
-            {auditEvents === null ? "Show recent activity" : "Hide activity"}
-          </button>
+          {demoMode ? (
+            <p className="empty-state">This read-only fictional snapshot has no visitor activity.</p>
+          ) : (
+            <button className="text-button" type="button" disabled={busy || auditLoading} onClick={fetchAudit}>
+              {auditEvents === null ? "Show recent activity" : "Hide activity"}
+            </button>
+          )}
           {auditLoading ? <p className="empty-state">Loading...</p> : null}
           {auditEvents !== null && !auditLoading ? (
             auditEvents.length === 0 ? (

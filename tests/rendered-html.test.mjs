@@ -20,8 +20,8 @@ test("renders the finished product welcome page", async () => {
   const html = await response.text();
   assert.match(html, /<title>Lore Family Demo<\/title>/i);
   assert.match(html, /Keep the people and stories that make you/);
-  assert.match(html, /Demo only/);
-  assert.match(html, /Anything you enter stays on this page and disappears when you refresh/);
+  assert.match(html, /Read-only demo/);
+  assert.match(html, /Nothing can be entered, uploaded, or saved/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
@@ -30,8 +30,9 @@ test("renders the fictional demo and warning on every page", async () => {
     const response = await request(path, { headers: { accept: "text/html" } });
     assert.equal(response.status, 200, path);
     const html = await response.text();
-    assert.match(html, /Demo only/, path);
+    assert.match(html, /Read-only demo/, path);
     assert.match(html, /Amara Adeyemi/, path);
+    assert.doesNotMatch(html, /Add a person|Save story|type="file"|recipientEmail/, path);
   }
 });
 

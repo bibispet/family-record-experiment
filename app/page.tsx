@@ -27,7 +27,7 @@ export default function Home() {
           </p>
           <div className="welcome-actions">
             <a className="button button-primary" href="/family">Try the fictional family record</a>
-            <span className="privacy-note">Demo changes stay on this page only. No in-app analytics, feed, likes, or advertising.</span>
+            <span className="privacy-note">Read-only fictional data. Nothing can be entered, uploaded, or saved.</span>
           </div>
         </div>
 

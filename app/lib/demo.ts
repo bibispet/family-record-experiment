@@ -5,7 +5,7 @@ const DEMO_TIMESTAMP = "2026-08-27T00:00:00.000Z";
 
 /**
  * The hosted prototype is deliberately a compiled seed-only demo. It never
- * opens D1 while rendering and all edits are handled in browser memory.
+ * opens D1 while rendering and exposes no capture or mutation controls.
  */
 export function getDemoSnapshot(): { viewer: FamilyViewer; data: FamilyDashboardData } {
   const identity = seedIdentity(EXAMPLE_SEED_PLAN);

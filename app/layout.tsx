@@ -15,7 +15,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en">
       <body className={`${sans.variable} ${serif.variable}`}>
         <aside className="demo-banner" role="note">
-          <strong>Demo only.</strong> Every person and story is fictional. Anything you enter stays on this page and disappears when you refresh.
+          <strong>Read-only demo.</strong> Every person and story is fictional. Nothing can be entered, uploaded, or saved.
         </aside>
         {children}
       </body>

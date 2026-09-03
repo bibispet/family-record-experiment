@@ -13,10 +13,11 @@ assert.equal(hosting.d1, "DB");
 assert.equal(hosting.r2, "MEDIA");
 assert.deepEqual(wrangler.observability, { enabled: false });
 assert.doesNotMatch(wranglerText, /00000000-0000-4000-8000-000000000000|site-creator-d1|site-creator-r2/);
-assert.match(layout, /Demo only\./);
-assert.match(layout, /Anything you enter stays on this page and disappears when you refresh\./);
+assert.match(layout, /Read-only demo\./);
+assert.match(layout, /Nothing can be entered, uploaded, or saved\./);
 assert.match(familyPage, /getDemoSnapshot\(\)/);
 assert.match(familyPage, /demoMode/);
-assert.match(dashboard, /demoRequest<T>\(path, init, data\)/);
+assert.match(dashboard, /!demoMode/);
+assert.doesNotMatch(dashboard, /demoRequest/);
 
-console.log("Demo deployment guardrails verified: fictional snapshot, device-only edits, real Sites bindings, observability off.");
+console.log("Demo deployment guardrails verified: fictional read-only snapshot, real Sites bindings, observability off.");
