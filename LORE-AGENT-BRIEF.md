@@ -506,14 +506,20 @@ v3.8: `scripts/seed.ts --purge` at line 160 runs immediately; no dry-run that
 prints per-table counts and then requires a second explicit flag.)
 
 
+**OPEN · P1 — implement export and durability (rung 6).**
+There is currently zero export code: no route or command produces structured
+data, original media, and a self-describing manifest. Do not treat the archive
+as durable until a family can take a complete open-format copy away from this
+codebase.
+
+
 **CLOSED — P0 · re-land this brief from the canonical clone.**
-Re-landed at v3.8 in this commit from the canonical WSL clone, on branch
-`docs/lore-agent-brief-v38` off `main` (`5cf72bc`), which descends from the
-`dev-signin-a` merge chain — so the "branch off `dev-signin-a`" requirement is
-met transitively and the branch can merge into `main` normally. `LORE-AGENT-
-BRIEF.md` plus the pointer lines in `AGENTS.md` and `CLAUDE.md`. `docs/lore-
-agent-brief` (`83a03e0`, v3.1) left on origin as a harmless archive, not
-merged. `docs/lore-agent-brief-v36` (`6934300`, v3.7 draft) also left in place.
+Re-landed from the canonical WSL clone on `docs/lore-agent-brief-v38`
+(`8fcae9a`) and merged into `main` with `--no-ff` as `95e8ae5`.
+`LORE-AGENT-BRIEF.md` plus the pointer lines in `AGENTS.md` and `CLAUDE.md` are
+therefore visible to fresh agents on `main`. `docs/lore-agent-brief`
+(`83a03e0`, v3.1) and `docs/lore-agent-brief-v36` (`6934300`, v3.7 draft)
+remain archive branches and were not merged.
 
 
 **CLOSED — P1 · land the blocker fixes on the hardening branch.**
@@ -528,6 +534,13 @@ Both archived on origin. Evidence: `git branch -avv` lists
 `origin/archive/win-onedrive-stash-6ad838e` (the dangling `6ad838e`) and
 `origin/archive/win-onedrive-pkg-changes` (`9d5fef5`, the `allowScripts`
 package.json/package-lock.json change).
+
+
+**CLOSED — P0 · rescue the OneDrive graph and adjacent edits verbatim.**
+Preserved without merging or reconciliation as `b9df020` on
+`origin/wip/onedrive-graph-and-edits`. The commit contains the three untracked
+`app/family/graph/` files, the four modified tracked files, and the two other
+untracked files present when `git add -A` captured the tree.
 
 
 **CLOSED — rescue Agent 1's abandoned edits.**
@@ -577,8 +590,8 @@ pass on the merged result.
 
 
 **CLOSED — P2 · confirm the elimination test has no symbol-name assertions.**
-Confirmed against the committed file. Evidence: `tests/build-elimination
-.test.mjs` (in `main`) asserts only on string-literal values
+Confirmed in `ff7e522` against the committed file. Evidence:
+`tests/build-elimination.test.mjs` (in `main`) asserts only on string-literal values
 (`DEV_ONLY_STRINGS`) plus the behavioural 404 proof, and its header comment
 explicitly says symbol-name greps are vacuous under minification. Verified by
 reading the file; no symbol-name assertions present.
@@ -602,12 +615,12 @@ of `origin/main`; revert handle `git revert -m 1 0567a12` recorded in
 (`a83d555`). 112 tests: 86 unit + 19 render + 7 build-elimination.
 
 
-**CLOSED — dev-mode default flipped** to deny-by-default (subject to the flag
-reconciliation above).
+**CLOSED — dev-mode default flipped** to deny-by-default in `a83d555`; the
+final flag-name reconciliation landed in `6fbccb0`.
 
 
 **CLOSED — header adapter deployment contract** documented inline beside
-`TRUSTED_PROXY_FLAG` in `identity.ts`.
+`TRUSTED_PROXY_FLAG` in `identity.ts` by `a83d555`.
 
 
 **CLOSED — orphan repo `4d562de`** archived on origin as
