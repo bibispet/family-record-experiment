@@ -212,6 +212,7 @@ export async function getFamilySnapshot(actor: ApiActor, requestedSpaceId?: stri
 
 export async function getAuditLog(actor: ApiActor, requestedSpaceId?: string) {
   const context = await getContext(actor, requestedSpaceId);
+  await requireSteward(context, "You cannot view the audit log for this family space.");
   const rows = await context.database.prepare(`
     SELECT ae.id, ae.action, ae.resource_type, ae.resource_id, ae.occurred_at, ae.dedupe_key, u.email_display
     FROM audit_events ae
@@ -607,10 +608,10 @@ export async function revokeShare(actor: ApiActor, shareId: string, requestedSpa
   };
 }
 
-async function requireSteward(context: StoreContext) {
+async function requireSteward(context: StoreContext, message = "You cannot add people to this family space.") {
   const membership = await context.database.prepare("SELECT 1 AS found FROM space_memberships WHERE space_id = ? AND user_id = ? AND role = 'steward' AND status = 'active'")
     .bind(context.space.id, context.user.id).first();
-  if (!membership) throw new HttpError(403, "You cannot add people to this family space.", "forbidden");
+  if (!membership) throw new HttpError(403, message, "forbidden");
 }
 
 async function managedPeople(context: StoreContext, personIds: string[]): Promise<DbPerson[]> {

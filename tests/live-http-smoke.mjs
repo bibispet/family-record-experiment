@@ -139,6 +139,7 @@ assert.equal(sharedSnapshot.data.relationships.length, 0, "an edge with a hidden
 assert.equal(sharedSnapshot.data.stories.length, 1);
 assert.equal(sharedSnapshot.data.media.length, 1);
 assert.deepEqual(sharedSnapshot.data.access.managedPersonIds, []);
+await request("/api/audit", { actor: recipient, spaceId: ownerSpaceId, expected: 403 });
 await request(`/api/media/${uploaded.id}?space=${ownerSpaceId}`, { actor: recipient });
 await request(`/api/people/${first.id}/stories`, {
   actor: recipient,
