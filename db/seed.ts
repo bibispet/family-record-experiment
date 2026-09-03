@@ -8,13 +8,7 @@ import type {
 
 // D1Database and D1PreparedStatement are ambient from @cloudflare/workers-types.
 
-/**
- * Deterministic, UUID-shaped ids derived from a plan's own labels. Everything
- * the seed writes is scoped to exactly one space and one steward user, so the
- * plan itself is the marker: purge those two ids and every example row is
- * gone. Stable across runs and machines; never collides with the app's
- * random UUIDs unless someone reuses the exact seed label.
- */
+/** Deterministic, UUID-shaped ids used to mark rows created by the seed. */
 export function deterministicUuid(label: string): string {
   const digest = createHash("sha256").update(`family-record-seed:${label}`).digest("hex").slice(0, 32);
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20)}`;
@@ -69,6 +63,65 @@ export type SeedPlan = {
   stories: SeedStory[];
   media: SeedMedia[];
 };
+
+/**
+ * Every table in child-first deletion order. transfer_cases must precede
+ * audit_events because a completed transfer can reference its completion
+ * event; media_assets must likewise precede stories.
+ */
+export const SEED_PURGE_TABLE_ORDER = [
+  "transfer_cases",
+  "share_grants",
+  "share_set_people",
+  "media_assets",
+  "relationships",
+  "stories",
+  "custodianships",
+  "person_account_links",
+  "person_authorities",
+  "audit_events",
+  "share_sets",
+  "people",
+  "space_memberships",
+  "family_spaces",
+  "users",
+] as const;
+
+export type SeedPurgeTable = (typeof SEED_PURGE_TABLE_ORDER)[number];
+export type SeedIdTable = Exclude<SeedPurgeTable, "space_memberships">;
+
+export type SeedProvenance = {
+  rowIds: Record<SeedIdTable, readonly string[]>;
+  memberships: readonly { spaceId: string; userId: string }[];
+};
+
+/** Exact row identities written by seedFamily; unlisted rows are never purged. */
+export function seedProvenance(plan: SeedPlan, identity: SeedIdentity = seedIdentity(plan)): SeedProvenance {
+  const ids = (table: SeedIdTable, count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      deterministicUuid(`row:${identity.spaceId}:${identity.stewardUserId}:${table}:${index}`),
+    );
+
+  return {
+    rowIds: {
+      transfer_cases: [],
+      share_grants: [],
+      share_set_people: [],
+      media_assets: ids("media_assets", plan.media.length),
+      relationships: ids("relationships", plan.relationships.length),
+      stories: ids("stories", plan.stories.length),
+      custodianships: [],
+      person_account_links: [],
+      person_authorities: ids("person_authorities", plan.people.length),
+      audit_events: [],
+      share_sets: [],
+      people: ids("people", plan.people.length),
+      family_spaces: [identity.spaceId],
+      users: [identity.stewardUserId],
+    },
+    memberships: [{ spaceId: identity.spaceId, userId: identity.stewardUserId }],
+  };
+}
 
 const DAY_MS = 86_400_000;
 
@@ -174,10 +227,9 @@ export type SeedResult = {
 };
 
 /**
- * Inserts a seed plan into a D1 database. Random UUIDs mean re-seeding inserts
- * another copy; the caller is responsible for choosing an empty target or
- * deleting the seed rows first. Composite keys (space_id, id) scope every
- * insert to the given space and steward user.
+ * Inserts a seed plan into a D1 database. Every inserted row has an exact
+ * deterministic identity in seedProvenance, so cleanup never needs to infer
+ * ownership from space_id. Composite keys still scope every insert.
  */
 export async function seedFamily(
   database: D1Database,
@@ -187,6 +239,7 @@ export async function seedFamily(
 ): Promise<SeedResult> {
   validateSeedPlan(plan);
   const now = Date.now();
+  const provenance = seedProvenance(plan, { spaceId, stewardUserId });
   const personIds = new Map<string, string>();
   const statements: D1PreparedStatement[] = [];
 
@@ -202,8 +255,8 @@ export async function seedFamily(
       .bind(spaceId, stewardUserId, now),
   );
 
-  for (const person of plan.people) {
-    const id = crypto.randomUUID();
+  for (const [index, person] of plan.people.entries()) {
+    const id = provenance.rowIds.people[index]!;
     personIds.set(person.displayName, id);
     statements.push(
       database
@@ -215,11 +268,11 @@ export async function seedFamily(
         .prepare(
           "INSERT INTO person_authorities (id, space_id, person_id, user_id, role, starts_at, ends_at, granted_by_user_id, created_at) VALUES (?, ?, ?, ?, 'record_manager', ?, NULL, ?, ?)",
         )
-        .bind(crypto.randomUUID(), spaceId, id, stewardUserId, now, stewardUserId, now),
+        .bind(provenance.rowIds.person_authorities[index]!, spaceId, id, stewardUserId, now, stewardUserId, now),
     );
   }
 
-  for (const relationship of plan.relationships) {
+  for (const [index, relationship] of plan.relationships.entries()) {
     const sourceId = personIds.get(relationship.source);
     const targetId = personIds.get(relationship.target);
     if (!sourceId || !targetId) {
@@ -231,7 +284,7 @@ export async function seedFamily(
           "INSERT INTO relationships (id, space_id, source_person_id, target_person_id, relationship_type, evidence_mode, created_by_user_id, created_at, ended_at, ended_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(
-          crypto.randomUUID(),
+          provenance.rowIds.relationships[index]!,
           spaceId,
           sourceId,
           targetId,
@@ -245,7 +298,7 @@ export async function seedFamily(
     );
   }
 
-  for (const story of plan.stories) {
+  for (const [index, story] of plan.stories.entries()) {
     const personId = personIds.get(story.person);
     if (!personId) throw new Error(`seed: missing person for story "${story.person}"`);
     statements.push(
@@ -253,23 +306,24 @@ export async function seedFamily(
         .prepare(
           "INSERT INTO stories (id, space_id, person_id, body, created_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(crypto.randomUUID(), spaceId, personId, story.body, stewardUserId, now, now),
+        .bind(provenance.rowIds.stories[index]!, spaceId, personId, story.body, stewardUserId, now, now),
     );
   }
 
-  for (const item of plan.media) {
+  for (const [index, item] of plan.media.entries()) {
     const personId = personIds.get(item.person);
     if (!personId) throw new Error(`seed: missing person for media "${item.person}"`);
+    const mediaId = provenance.rowIds.media_assets[index]!;
     statements.push(
       database
         .prepare(
           "INSERT INTO media_assets (id, space_id, person_id, r2_key, kind, canonical_mime, byte_size, caption, status, created_by_user_id, created_at, ready_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, ?)",
         )
         .bind(
-          crypto.randomUUID(),
+          mediaId,
           spaceId,
           personId,
-          `seed/${crypto.randomUUID()}`,
+          `seed/${mediaId}`,
           item.kind,
           item.kind === "photo" ? "image/png" : "audio/mpeg",
           item.byteSize,

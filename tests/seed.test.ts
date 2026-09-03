@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   EXAMPLE_SEED_PLAN,
+  SEED_PURGE_TABLE_ORDER,
   deterministicUuid,
   seedFamily,
   seedIdentity,
+  seedProvenance,
   validateSeedPlan,
   type SeedPlan,
 } from "../db/seed";
@@ -129,7 +131,9 @@ test("a one-appearance person has exactly one bond and no records of their own",
 
 test("seeding inserts the full graph with stable, scoped rows", async () => {
   const { database, records } = fakeD1();
-  const result = await seedFamily(database, "space-seed", "user-seed", EXAMPLE_SEED_PLAN);
+  const identity = seedIdentity(EXAMPLE_SEED_PLAN);
+  const provenance = seedProvenance(EXAMPLE_SEED_PLAN, identity);
+  const result = await seedFamily(database, identity.spaceId, identity.stewardUserId, EXAMPLE_SEED_PLAN);
 
   assert.equal(result.people, EXAMPLE_SEED_PLAN.people.length);
   assert.equal(result.relationships, EXAMPLE_SEED_PLAN.relationships.length);
@@ -145,6 +149,23 @@ test("seeding inserts the full graph with stable, scoped rows", async () => {
   assert.equal(byTable("relationships").length, result.relationships);
   assert.equal(byTable("stories").length, result.stories);
   assert.equal(byTable("media_assets").length, result.media);
+
+  for (const table of [
+    "users",
+    "family_spaces",
+    "people",
+    "person_authorities",
+    "relationships",
+    "stories",
+    "media_assets",
+  ] as const) {
+    assert.deepEqual(
+      byTable(table).map((record) => record.params[0]),
+      provenance.rowIds[table],
+      `${table} inserts must use their exact seed-provenance ids`,
+    );
+  }
+  assert.deepEqual(byTable("space_memberships")[0]?.params.slice(0, 2), [identity.spaceId, identity.stewardUserId]);
 
   // Ended bonds carry both ended_at and ended_by_user_id.
   for (const record of byTable("relationships")) {
@@ -165,13 +186,13 @@ test("seeding inserts the full graph with stable, scoped rows", async () => {
   // Every person gets exactly one record_manager authority under the steward.
   for (const record of byTable("person_authorities")) {
     assert.ok(record.sql.includes("'record_manager'"));
-    assert.equal(record.params[3], "user-seed"); // user_id
-    assert.equal(record.params[5], "user-seed"); // granted_by_user_id
+    assert.equal(record.params[3], identity.stewardUserId); // user_id
+    assert.equal(record.params[5], identity.stewardUserId); // granted_by_user_id
   }
 
   // All rows are scoped to the seeded space and steward.
   for (const record of byTable("people")) {
-    assert.equal(record.params[1], "space-seed");
+    assert.equal(record.params[1], identity.spaceId);
   }
 });
 
@@ -181,7 +202,7 @@ test("validateSeedPlan rejects a plan whose media references a stranger", async 
   assert.throws(() => validateSeedPlan(mutated), /Invisible Stranger/);
 });
 
-test("the seed identity is deterministic and marks every seeded row", () => {
+test("the seed identity and row provenance are deterministic", () => {
   assert.match(deterministicUuid("space:Archivo Adeyemi:seed-steward@example.test"), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   const first = seedIdentity(EXAMPLE_SEED_PLAN);
   const second = seedIdentity(EXAMPLE_SEED_PLAN);
@@ -190,4 +211,34 @@ test("the seed identity is deterministic and marks every seeded row", () => {
   assert.notEqual(first.spaceId, first.stewardUserId);
   const otherPlan: SeedPlan = { ...EXAMPLE_SEED_PLAN, spaceName: "Another Archive" };
   assert.notEqual(seedIdentity(otherPlan).spaceId, first.spaceId);
+  assert.deepEqual(seedProvenance(EXAMPLE_SEED_PLAN), seedProvenance(EXAMPLE_SEED_PLAN));
+});
+
+test("purge provenance covers every table in foreign-key-safe order", () => {
+  assert.deepEqual(SEED_PURGE_TABLE_ORDER, [
+    "transfer_cases",
+    "share_grants",
+    "share_set_people",
+    "media_assets",
+    "relationships",
+    "stories",
+    "custodianships",
+    "person_account_links",
+    "person_authorities",
+    "audit_events",
+    "share_sets",
+    "people",
+    "space_memberships",
+    "family_spaces",
+    "users",
+  ]);
+
+  const provenance = seedProvenance(EXAMPLE_SEED_PLAN);
+  for (const table of SEED_PURGE_TABLE_ORDER) {
+    if (table === "space_memberships") {
+      assert.equal(provenance.memberships.length, 1);
+    } else {
+      assert.ok(Object.hasOwn(provenance.rowIds, table), `${table} must have an explicit provenance list`);
+    }
+  }
 });
